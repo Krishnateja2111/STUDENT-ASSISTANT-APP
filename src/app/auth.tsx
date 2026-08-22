@@ -1,10 +1,11 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
+import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { MinTouchTarget, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAppState } from '@/state/app-state';
 
@@ -32,17 +33,18 @@ export default function AuthScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.title}>
-        Student Assistant
-      </ThemedText>
-      <ThemedText type="subtitle" style={styles.subtitle}>
+      <ThemedText type="screenTitle">Student Assistant</ThemedText>
+      <ThemedText type="sectionTitle" style={styles.subtitle}>
         {COPY[mode].title}
       </ThemedText>
 
       <TextInput
-        style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+        style={[
+          styles.input,
+          { color: theme.text, borderColor: theme.border, backgroundColor: theme.backgroundElement },
+        ]}
         placeholder="Email"
-        placeholderTextColor={theme.textSecondary}
+        placeholderTextColor={theme.textMuted}
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}
@@ -51,30 +53,29 @@ export default function AuthScreen() {
 
       {mode !== 'forgot' && (
         <TextInput
-          style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+          style={[
+            styles.input,
+            { color: theme.text, borderColor: theme.border, backgroundColor: theme.backgroundElement },
+          ]}
           placeholder="Password"
-          placeholderTextColor={theme.textSecondary}
+          placeholderTextColor={theme.textMuted}
           secureTextEntry
           value={password}
           onChangeText={setPassword}
         />
       )}
 
-      <Pressable style={styles.primaryButton} onPress={handleSubmit}>
-        <ThemedText type="default" style={styles.primaryButtonText}>
-          {COPY[mode].cta}
-        </ThemedText>
-      </Pressable>
+      <Button label={COPY[mode].cta} onPress={handleSubmit} style={styles.primaryButton} />
 
-      <ThemedView style={styles.links}>
+      <View style={styles.links}>
         {mode === 'login' && (
           <>
-            <Pressable onPress={() => setMode('signup')}>
+            <Pressable style={styles.linkTarget} onPress={() => setMode('signup')}>
               <ThemedText type="link" themeColor="textSecondary">
                 No account? Sign up
               </ThemedText>
             </Pressable>
-            <Pressable onPress={() => setMode('forgot')}>
+            <Pressable style={styles.linkTarget} onPress={() => setMode('forgot')}>
               <ThemedText type="link" themeColor="textSecondary">
                 Forgot password?
               </ThemedText>
@@ -82,13 +83,13 @@ export default function AuthScreen() {
           </>
         )}
         {mode !== 'login' && (
-          <Pressable onPress={() => setMode('login')}>
+          <Pressable style={styles.linkTarget} onPress={() => setMode('login')}>
             <ThemedText type="link" themeColor="textSecondary">
               Back to log in
             </ThemedText>
           </Pressable>
         )}
-      </ThemedView>
+      </View>
     </ThemedView>
   );
 }
@@ -100,37 +101,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
     gap: Spacing.three,
   },
-  title: {
-    fontSize: 28,
-    lineHeight: 34,
-  },
   subtitle: {
-    fontSize: 18,
-    lineHeight: 24,
     marginBottom: Spacing.two,
   },
   input: {
     borderWidth: 1,
-    borderRadius: Spacing.two,
+    borderRadius: Radius.md,
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two + 2,
+    paddingVertical: Spacing.three,
     fontSize: 16,
   },
   primaryButton: {
-    backgroundColor: '#3C87F7',
-    borderRadius: Spacing.two,
-    paddingVertical: Spacing.three,
-    alignItems: 'center',
     marginTop: Spacing.two,
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontWeight: '600',
   },
   links: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: Spacing.two,
-    backgroundColor: 'transparent',
+    marginTop: Spacing.one,
+  },
+  linkTarget: {
+    minHeight: MinTouchTarget,
+    justifyContent: 'center',
   },
 });
