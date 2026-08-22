@@ -27,7 +27,7 @@ export default function TabsLayout() {
           paddingTop: TAB_BAR_PADDING,
           paddingBottom: TAB_BAR_PADDING + insets.bottom,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600', lineHeight: 14 },
+        tabBarLabelStyle: { fontSize: 10.5, fontWeight: '600', lineHeight: 13 },
         tabBarIconStyle: { marginBottom: 0 },
         tabBarItemStyle: { height: 48 },
       }}>
@@ -36,7 +36,7 @@ export default function TabsLayout() {
         options={{
           title: 'Dashboard',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
           ),
         }}
       />
@@ -45,7 +45,34 @@ export default function TabsLayout() {
         options={{
           title: 'Calendar',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="courses"
+        options={{
+          title: 'Courses',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'school' : 'school-outline'} size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="documents"
+        options={{
+          title: 'Documents',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'document-text' : 'document-text-outline'} size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
           ),
         }}
       />

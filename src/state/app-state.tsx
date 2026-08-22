@@ -5,6 +5,7 @@ import {
   generateSchedule,
   getScheduleHealth,
   rescheduleAfterMiss,
+  type AvailabilityBlock,
   type Course,
   type ExplanationEntry,
   type RescheduleResult,
@@ -15,8 +16,8 @@ import {
 import { seedAvailability, seedCourses, seedTasks } from '@/state/seed-data';
 
 /**
- * TODO(state-management): this is a plain React Context stand-in so the 5
- * MVP screens are wireable now. State management (Zustand vs Context) and
+ * TODO(state-management): this is a plain React Context stand-in so the MVP
+ * screens are wireable now. State management (Zustand vs Context) and
  * persistence (Supabase vs alternative) are explicitly undecided per the
  * brief — replace this whole module once that's picked. Auth is in-memory
  * only and resets on page reload.
@@ -28,11 +29,19 @@ interface AppState {
   logout: () => void;
 
   courses: Course[];
+  addCourse: (course: Omit<Course, 'id'>) => string;
+  updateCourse: (id: string, updates: Partial<Omit<Course, 'id'>>) => void;
+
   tasks: Task[];
   addTask: (task: Omit<Task, 'id' | 'status'>) => void;
 
   scheduledBlocks: ScheduledBlock[];
   removeScheduledBlock: (blockId: string) => void;
+
+  availability: AvailabilityBlock[];
+  addAvailabilityBlock: (block: Omit<AvailabilityBlock, 'id'>) => void;
+  updateAvailabilityBlock: (id: string, updates: Partial<Omit<AvailabilityBlock, 'id'>>) => void;
+  removeAvailabilityBlock: (id: string) => void;
 
   health: ScheduleHealth;
 
@@ -50,14 +59,16 @@ function isSchedulable(task: Task): boolean {
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [isAuthed, setIsAuthed] = useState(false);
+  const [courses, setCourses] = useState<Course[]>(seedCourses);
   const [tasks, setTasks] = useState<Task[]>(seedTasks);
+  const [availability, setAvailability] = useState<AvailabilityBlock[]>(seedAvailability);
   const [scheduledBlocks, setScheduledBlocks] = useState<ScheduledBlock[]>(
     () => generateSchedule(seedTasks.filter(isSchedulable), seedAvailability).scheduled
   );
   const [pendingReschedule, setPendingReschedule] = useState<RescheduleResult | null>(null);
   const [pendingExplanations, setPendingExplanations] = useState<ExplanationEntry[]>([]);
 
-  const health = useMemo(() => getScheduleHealth(tasks, seedAvailability), [tasks]);
+  const health = useMemo(() => getScheduleHealth(tasks, availability), [tasks, availability]);
 
   const value = useMemo<AppState>(
     () => ({
@@ -65,7 +76,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       login: () => setIsAuthed(true),
       logout: () => setIsAuthed(false),
 
-      courses: seedCourses,
+      courses,
+      addCourse: (course) => {
+        const id = `course-${Date.now()}`;
+        setCourses((prev) => [...prev, { ...course, id }]);
+        return id;
+      },
+      updateCourse: (id, updates) =>
+        setCourses((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c))),
+
       tasks,
       addTask: (task) =>
         setTasks((prev) => [...prev, { ...task, id: `task-${Date.now()}`, status: 'pending' }]),
@@ -73,6 +92,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       scheduledBlocks,
       removeScheduledBlock: (blockId) =>
         setScheduledBlocks((prev) => prev.filter((b) => b.id !== blockId)),
+
+      availability,
+      addAvailabilityBlock: (block) =>
+        setAvailability((prev) => [...prev, { ...block, id: `avail-${Date.now()}` }]),
+      updateAvailabilityBlock: (id, updates) =>
+        setAvailability((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a))),
+      removeAvailabilityBlock: (id) => setAvailability((prev) => prev.filter((a) => a.id !== id)),
 
       health,
 
@@ -82,7 +108,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         const missedTask = tasks.find((t) => t.id === taskId);
         if (!missedTask) return;
         setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: 'missed' } : t)));
-        const result = rescheduleAfterMiss(missedTask, tasks, seedAvailability);
+        const result = rescheduleAfterMiss(missedTask, tasks, availability);
         setPendingReschedule(result);
         setPendingExplanations(explainChanges(result, tasks));
       },
@@ -93,7 +119,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         setPendingExplanations([]);
       },
     }),
-    [isAuthed, tasks, scheduledBlocks, health, pendingReschedule, pendingExplanations]
+    [isAuthed, courses, tasks, scheduledBlocks, availability, health, pendingReschedule, pendingExplanations]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
