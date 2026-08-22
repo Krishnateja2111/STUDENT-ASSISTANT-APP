@@ -80,4 +80,23 @@ describe('generateSchedule', () => {
     expect(dependentBlock).toBeDefined();
     expect(new Date(dependentBlock.start).getTime()).toBeGreaterThanOrEqual(new Date(depBlock.end).getTime());
   });
+
+  it('minimum session length: a task is never split into an awkward sub-20-minute non-final piece', () => {
+    // Reproduces the exact real-data bug: a 15-minute leftover slot right
+    // before a much bigger block should be skipped, not used as a fragment.
+    const availability: AvailabilityBlock[] = [
+      { id: 'sliver', start: '2026-01-05T15:45:00', end: '2026-01-05T16:00:00' }, // 15 min
+      { id: 'main', start: '2026-01-05T19:00:00', end: '2026-01-05T22:00:00' }, // 180 min
+    ];
+    const task = makeTask({ id: 'exam', taskType: 'exam_prep', dueDate: '2026-01-10T00:00:00', estimatedMinutes: 180 });
+
+    const result = generateSchedule([task], availability);
+
+    expect(result.overflow).toHaveLength(0);
+    const blocks = result.scheduled.filter((b) => b.taskId === 'exam');
+    expect(blocks).toHaveLength(1);
+    expect(durationMinutes(blocks[0].start, blocks[0].end)).toBe(180);
+    // The 15-minute sliver was left completely untouched.
+    expect(blocks[0].start).toBe('2026-01-05T19:00:00');
+  });
 });

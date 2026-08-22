@@ -24,11 +24,26 @@ export interface AllocationResult {
   remainingSegments: TimeSegment[];
 }
 
+/** Below this, a piece reads as an awkward, disruptive tiny study session rather than real work time. */
+export const MIN_SESSION_MINUTES = 20;
+const MIN_SESSION_MS = MIN_SESSION_MINUTES * 60_000;
+
 /**
  * Greedily accumulates `durationMs` from `segments`, earliest time first,
  * only using time within [earliestStart, latestEnd]. Returns null if the
  * full duration can't be accumulated inside that window — never partially
  * allocates. Pure: does not mutate `segments`.
+ *
+ * Enforces a minimum session length: a candidate piece smaller than
+ * MIN_SESSION_MINUTES is only accepted if it's the piece that finishes the
+ * task outright (nothing left to fragment afterward — a short task's one
+ * natural sitting isn't a "fragment"). A too-small piece that would leave
+ * more of the task still needing a slot is skipped instead, so a later,
+ * roomier segment can take that remainder in one larger contiguous chunk —
+ * "defer to the next availability window" rather than splinter the task.
+ * If nothing ever offers a large-enough (or task-completing) piece, the
+ * whole allocation fails and the caller reports the task as overflow,
+ * rather than silently accepting a disruptive sliver.
  */
 export function allocateFromSegments(
   segments: TimeSegment[],
@@ -54,6 +69,12 @@ export function allocateFromSegments(
     }
 
     const takeMs = Math.min(usableEnd - usableStart, remainingMs);
+    const completesTask = takeMs === remainingMs;
+    if (takeMs < MIN_SESSION_MS && !completesTask) {
+      nextSegments.push(seg);
+      continue;
+    }
+
     const pieceStart = usableStart;
     const pieceEnd = usableStart + takeMs;
     pieces.push({ start: pieceStart, end: pieceEnd });
