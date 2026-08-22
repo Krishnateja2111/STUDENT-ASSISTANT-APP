@@ -7,7 +7,8 @@ import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { CourseAccentPalette, Spacing, StatusColors } from '@/constants/theme';
+import { Spacing, StatusColors } from '@/constants/theme';
+import { getCourseAccent } from '@/lib/course-accent';
 import { ReasonCode, type ScheduledBlock } from '@/lib/scheduling';
 import { useAppState } from '@/state/app-state';
 
@@ -42,9 +43,7 @@ export default function RescheduleScreen() {
   const taskTitle = (taskId: string) => tasks.find((t) => t.id === taskId)?.title ?? 'Task';
   const courseAccent = (taskId: string) => {
     const task = tasks.find((t) => t.id === taskId);
-    const courseIndex = courses.findIndex((c) => c.id === task?.courseId);
-    const course = courses[courseIndex];
-    return course?.colorTag ?? CourseAccentPalette[courseIndex % CourseAccentPalette.length] ?? StatusColors.brand;
+    return getCourseAccent(task?.courseId, courses);
   };
   const changeFor = (taskId: string) => pendingReschedule?.changes.find((c) => c.taskId === taskId);
 

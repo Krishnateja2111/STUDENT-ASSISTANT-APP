@@ -1,14 +1,24 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { Button } from '@/components/button';
+import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Spacing, StatusColors } from '@/constants/theme';
+import { getCourseAccent } from '@/lib/course-accent';
 import type { ScheduledBlock } from '@/lib/scheduling';
 import { useAppState } from '@/state/app-state';
 
-function formatDay(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+function formatDay(dayKey: string) {
+  // dayKey is a bare YYYY-MM-DD (from block.start.slice(0, 10)). Parsing that
+  // directly with `new Date()` reads it as UTC midnight, which rolls back a
+  // day in timezones behind UTC — construct from local components instead.
+  const [year, month, day] = dayKey.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 function formatTime(iso: string) {
@@ -34,14 +44,12 @@ export default function CalendarScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <ThemedText type="title" style={styles.pageTitle}>
-        Calendar
-      </ThemedText>
+      <ThemedText type="screenTitle">Calendar</ThemedText>
 
       {Object.entries(groups).map(([day, blocks]) => (
-        <ThemedView key={day} style={styles.dayGroup}>
-          <ThemedText type="smallBold" themeColor="textSecondary">
-            {formatDay(day)}
+        <View key={day} style={styles.dayGroup}>
+          <ThemedText type="meta" themeColor="textMuted" style={styles.dayLabel}>
+            {formatDay(day).toUpperCase()}
           </ThemedText>
           {blocks.map((block) => {
             const task = tasks.find((t) => t.id === block.taskId);
@@ -51,33 +59,35 @@ export default function CalendarScreen() {
               <Pressable
                 key={block.id}
                 onPress={() => setExpandedBlockId(expanded ? null : block.id)}>
-                <ThemedView type="backgroundElement" style={styles.blockRow}>
-                  <ThemedView style={styles.blockMain}>
-                    <ThemedText type="smallBold">
-                      {formatTime(block.start)} – {formatTime(block.end)}
-                    </ThemedText>
-                    <ThemedText type="default">{task.title}</ThemedText>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {courseName(task.courseId)}
-                    </ThemedText>
-                  </ThemedView>
+                <Card accentColor={getCourseAccent(task.courseId, courses)} style={styles.blockCard}>
+                  <View style={styles.blockRow}>
+                    <View style={styles.blockMain}>
+                      <ThemedText type="meta" themeColor="textSecondary">
+                        {formatTime(block.start)} – {formatTime(block.end)}
+                      </ThemedText>
+                      <ThemedText type="cardTitle">{task.title}</ThemedText>
+                      <ThemedText type="meta" themeColor="textMuted">
+                        {courseName(task.courseId)}
+                      </ThemedText>
+                    </View>
+                  </View>
                   {expanded && (
-                    <Pressable
-                      style={styles.removeButton}
+                    <Button
+                      label="Remove from schedule"
+                      variant="outlined"
+                      color={StatusColors.danger}
                       onPress={() => {
                         removeScheduledBlock(block.id);
                         setExpandedBlockId(null);
-                      }}>
-                      <ThemedText type="small" themeColor="text">
-                        Remove
-                      </ThemedText>
-                    </Pressable>
+                      }}
+                      style={styles.removeButton}
+                    />
                   )}
-                </ThemedView>
+                </Card>
               </Pressable>
             );
           })}
-        </ThemedView>
+        </View>
       ))}
     </ScrollView>
   );
@@ -88,31 +98,25 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
     gap: Spacing.four,
   },
-  pageTitle: {
-    fontSize: 28,
-    lineHeight: 34,
-  },
   dayGroup: {
     gap: Spacing.two,
-    backgroundColor: 'transparent',
+  },
+  dayLabel: {
+    letterSpacing: 0.6,
+    marginLeft: Spacing.one,
+  },
+  blockCard: {
+    gap: Spacing.two,
   },
   blockRow: {
-    borderRadius: Spacing.two,
-    padding: Spacing.three,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: Spacing.two,
   },
   blockMain: {
     flex: 1,
-    gap: Spacing.half,
-    backgroundColor: 'transparent',
+    gap: 2,
   },
   removeButton: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.two,
-    backgroundColor: '#FBE4E2',
+    alignSelf: 'flex-start',
   },
 });

@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
+import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { MinTouchTarget, Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { getCourseAccent } from '@/lib/course-accent';
 import type { TaskType } from '@/lib/scheduling';
 import { useAppState } from '@/state/app-state';
 
@@ -42,79 +43,102 @@ export default function TaskEntryScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <ThemedText type="smallBold" themeColor="textSecondary">
-        Title
+      <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
+        TITLE
       </ThemedText>
       <TextInput
-        style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+        style={[
+          styles.input,
+          { color: theme.text, borderColor: theme.border, backgroundColor: theme.backgroundElement },
+        ]}
         placeholder="e.g. Problem Set 5"
-        placeholderTextColor={theme.textSecondary}
+        placeholderTextColor={theme.textMuted}
         value={title}
         onChangeText={setTitle}
       />
 
-      <ThemedText type="smallBold" themeColor="textSecondary">
-        Course
+      <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
+        COURSE
       </ThemedText>
-      <ThemedView style={styles.chipRow}>
-        {courses.map((course) => (
-          <Pressable key={course.id} onPress={() => setCourseId(course.id)}>
-            <ThemedView
-              type={courseId === course.id ? 'backgroundSelected' : 'backgroundElement'}
-              style={styles.chip}>
-              <ThemedText type="small">{course.name}</ThemedText>
-            </ThemedView>
-          </Pressable>
-        ))}
-      </ThemedView>
+      <View style={styles.chipRow}>
+        {courses.map((course) => {
+          const selected = courseId === course.id;
+          const accent = getCourseAccent(course.id, courses);
+          return (
+            <Pressable key={course.id} onPress={() => setCourseId(course.id)}>
+              <View
+                style={[
+                  styles.chip,
+                  selected
+                    ? { backgroundColor: accent }
+                    : { backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.border },
+                ]}>
+                <ThemedText type="small" style={selected ? styles.chipTextSelected : undefined}>
+                  {course.name}
+                </ThemedText>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
 
-      <ThemedText type="smallBold" themeColor="textSecondary">
-        Task type
+      <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
+        TASK TYPE
       </ThemedText>
-      <ThemedView style={styles.chipRow}>
-        {TASK_TYPES.map((t) => (
-          <Pressable key={t.value} onPress={() => setTaskType(t.value)}>
-            <ThemedView
-              type={taskType === t.value ? 'backgroundSelected' : 'backgroundElement'}
-              style={styles.chip}>
-              <ThemedText type="small">{t.label}</ThemedText>
-            </ThemedView>
-          </Pressable>
-        ))}
-      </ThemedView>
+      <View style={styles.chipRow}>
+        {TASK_TYPES.map((t) => {
+          const selected = taskType === t.value;
+          return (
+            <Pressable key={t.value} onPress={() => setTaskType(t.value)}>
+              <View
+                style={[
+                  styles.chip,
+                  selected
+                    ? { backgroundColor: StatusColors.brand }
+                    : { backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.border },
+                ]}>
+                <ThemedText type="small" style={selected ? styles.chipTextSelected : undefined}>
+                  {t.label}
+                </ThemedText>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
 
-      <ThemedText type="smallBold" themeColor="textSecondary">
-        Deadline
+      <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
+        DEADLINE
       </ThemedText>
       {/* TODO(ui): swap for a real date/time picker; kept as text input to
           avoid pulling in a native-only picker dependency during this
           UI-validation pass. */}
       <TextInput
-        style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+        style={[
+          styles.input,
+          { color: theme.text, borderColor: theme.border, backgroundColor: theme.backgroundElement },
+        ]}
         placeholder="YYYY-MM-DDTHH:mm"
-        placeholderTextColor={theme.textSecondary}
+        placeholderTextColor={theme.textMuted}
         value={dueDate}
         onChangeText={setDueDate}
       />
 
-      <ThemedText type="smallBold" themeColor="textSecondary">
-        Estimated duration (minutes)
+      <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
+        ESTIMATED DURATION (MINUTES)
       </ThemedText>
       <TextInput
-        style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+        style={[
+          styles.input,
+          { color: theme.text, borderColor: theme.border, backgroundColor: theme.backgroundElement },
+        ]}
         placeholder="60"
-        placeholderTextColor={theme.textSecondary}
+        placeholderTextColor={theme.textMuted}
         keyboardType="numeric"
         value={estimatedMinutes}
         onChangeText={setEstimatedMinutes}
       />
 
-      <Pressable
-        style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
-        disabled={!canSave}
-        onPress={handleSave}>
-        <ThemedText style={styles.saveButtonText}>Save task</ThemedText>
-      </Pressable>
+      <Button label="Save task" onPress={handleSave} disabled={!canSave} style={styles.saveButton} />
     </ScrollView>
   );
 }
@@ -124,38 +148,35 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
     gap: Spacing.two,
   },
+  label: {
+    letterSpacing: 0.6,
+    marginTop: Spacing.two,
+    marginBottom: Spacing.one,
+  },
   input: {
     borderWidth: 1,
-    borderRadius: Spacing.two,
+    borderRadius: Radius.md,
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two + 2,
+    paddingVertical: Spacing.three,
     fontSize: 16,
-    marginBottom: Spacing.two,
   },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.two,
-    marginBottom: Spacing.two,
-    backgroundColor: 'transparent',
   },
   chip: {
+    minHeight: MinTouchTarget,
+    justifyContent: 'center',
     paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.five,
+    borderRadius: Radius.pill,
   },
-  saveButton: {
-    backgroundColor: '#3C87F7',
-    borderRadius: Spacing.two,
-    paddingVertical: Spacing.three,
-    alignItems: 'center',
-    marginTop: Spacing.three,
-  },
-  saveButtonDisabled: {
-    opacity: 0.5,
-  },
-  saveButtonText: {
+  chipTextSelected: {
     color: '#ffffff',
     fontWeight: '600',
+  },
+  saveButton: {
+    marginTop: Spacing.four,
   },
 });

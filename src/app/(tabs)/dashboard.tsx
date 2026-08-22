@@ -6,7 +6,8 @@ import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { CourseAccentPalette, Spacing, StatusColors } from '@/constants/theme';
+import { Spacing, StatusColors } from '@/constants/theme';
+import { getCourseAccent } from '@/lib/course-accent';
 import type { HealthStatus, ScheduledBlock } from '@/lib/scheduling';
 import { useAppState } from '@/state/app-state';
 
@@ -26,12 +27,7 @@ export default function DashboardScreen() {
   const { tasks, courses, scheduledBlocks, health, markMissed } = useAppState();
 
   const courseName = (courseId: string) => courses.find((c) => c.id === courseId)?.name ?? 'Unknown course';
-  const courseAccent = (courseId: string) => {
-    const course = courses.find((c) => c.id === courseId);
-    if (course?.colorTag) return course.colorTag;
-    const index = courses.findIndex((c) => c.id === courseId);
-    return CourseAccentPalette[index % CourseAccentPalette.length] ?? StatusColors.brand;
-  };
+  const courseAccent = (courseId: string) => getCourseAccent(courseId, courses);
 
   const todaysBlocks = scheduledBlocks
     .filter((b) => b.start.startsWith(TODAY))
