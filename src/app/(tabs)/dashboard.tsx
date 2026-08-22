@@ -1,16 +1,19 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { Button } from '@/components/button';
+import { Card } from '@/components/card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { CourseAccentPalette, Spacing, StatusColors } from '@/constants/theme';
 import type { HealthStatus, ScheduledBlock } from '@/lib/scheduling';
 import { useAppState } from '@/state/app-state';
 
-const HEALTH_COLOR: Record<HealthStatus, string> = {
-  green: '#4CAF7D',
-  yellow: '#E0A93C',
-  red: '#E0524A',
+const HEALTH_META: Record<HealthStatus, { color: string; icon: keyof typeof Ionicons.glyphMap; label: string }> = {
+  green: { color: StatusColors.success, icon: 'checkmark-circle', label: 'On track' },
+  yellow: { color: StatusColors.warning, icon: 'alert-circle', label: 'Getting tight' },
+  red: { color: StatusColors.danger, icon: 'warning', label: 'Overloaded' },
 };
 
 const TODAY = '2026-08-21';
@@ -23,6 +26,12 @@ export default function DashboardScreen() {
   const { tasks, courses, scheduledBlocks, health, markMissed } = useAppState();
 
   const courseName = (courseId: string) => courses.find((c) => c.id === courseId)?.name ?? 'Unknown course';
+  const courseAccent = (courseId: string) => {
+    const course = courses.find((c) => c.id === courseId);
+    if (course?.colorTag) return course.colorTag;
+    const index = courses.findIndex((c) => c.id === courseId);
+    return CourseAccentPalette[index % CourseAccentPalette.length] ?? StatusColors.brand;
+  };
 
   const todaysBlocks = scheduledBlocks
     .filter((b) => b.start.startsWith(TODAY))
@@ -30,6 +39,7 @@ export default function DashboardScreen() {
 
   const missedTasks = tasks.filter((t) => t.status === 'missed');
   const needsInputTask = health.suggestedDeferrals[0];
+  const healthMeta = HEALTH_META[health.status];
 
   const taskForBlock = (block: ScheduledBlock) => tasks.find((t) => t.id === block.taskId);
 
@@ -40,32 +50,39 @@ export default function DashboardScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <ThemedText type="title" style={styles.pageTitle}>
-        Today
-      </ThemedText>
+      <ThemedText type="screenTitle">Today</ThemedText>
 
-      <ThemedView style={[styles.healthBadge, { backgroundColor: HEALTH_COLOR[health.status] }]}>
-        <ThemedText style={styles.healthBadgeText}>{health.status.toUpperCase()}</ThemedText>
-        <ThemedText style={styles.healthBadgeText}>{health.message}</ThemedText>
-      </ThemedView>
+      <Card accentColor={healthMeta.color} style={styles.healthCard}>
+        <Ionicons name={healthMeta.icon} size={22} color={healthMeta.color} />
+        <ThemedView style={styles.healthTextGroup}>
+          <ThemedText type="cardTitle">{healthMeta.label}</ThemedText>
+          <ThemedText type="meta" themeColor="textSecondary">
+            {health.message}
+          </ThemedText>
+        </ThemedView>
+      </Card>
 
       {missedTasks.length > 0 && (
         <Pressable
-          style={styles.missedCard}
           onPress={() => {
             markMissed(missedTasks[0].id);
             router.push('/reschedule');
           }}>
-          <ThemedText type="smallBold" themeColor="text">
-            {missedTasks.length} task{missedTasks.length > 1 ? 's' : ''} missed
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {missedTasks[0].title} — tap to see the updated schedule
-          </ThemedText>
+          <Card accentColor={StatusColors.danger} style={styles.missedCard}>
+            <Ionicons name="alert-circle" size={22} color={StatusColors.danger} />
+            <ThemedView style={styles.healthTextGroup}>
+              <ThemedText type="cardTitle">
+                {missedTasks.length} task{missedTasks.length > 1 ? 's' : ''} missed
+              </ThemedText>
+              <ThemedText type="meta" themeColor="textSecondary">
+                {missedTasks[0].title} — tap to see the updated schedule
+              </ThemedText>
+            </ThemedView>
+          </Card>
         </Pressable>
       )}
 
-      <ThemedText type="subtitle" style={styles.sectionTitle}>
+      <ThemedText type="sectionTitle" style={styles.sectionSpacing}>
         Today&apos;s plan
       </ThemedText>
       {todaysBlocks.length === 0 && (
@@ -75,45 +92,49 @@ export default function DashboardScreen() {
         const task = taskForBlock(block);
         if (!task) return null;
         return (
-          <ThemedView key={block.id} type="backgroundElement" style={styles.taskRow}>
-            <ThemedView style={styles.taskRowMain}>
-              <ThemedText type="smallBold">
+          <Card key={block.id} accentColor={courseAccent(task.courseId)} style={styles.taskCard}>
+            <ThemedView style={styles.taskCardMain}>
+              <ThemedText type="meta" themeColor="textSecondary">
                 {formatTime(block.start)} – {formatTime(block.end)}
               </ThemedText>
-              <ThemedText type="default">{task.title}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
+              <ThemedText type="cardTitle">{task.title}</ThemedText>
+              <ThemedText type="meta" themeColor="textMuted">
                 {courseName(task.courseId)}
               </ThemedText>
             </ThemedView>
             {task.status !== 'missed' && task.status !== 'completed' && (
-              <Pressable onPress={() => handleMarkMissed(task.id)} style={styles.markMissedButton}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Mark missed
-                </ThemedText>
-              </Pressable>
+              <Button
+                label="Missed"
+                variant="outlined"
+                color={StatusColors.danger}
+                onPress={() => handleMarkMissed(task.id)}
+                style={styles.missedButton}
+              />
             )}
-          </ThemedView>
+          </Card>
         );
       })}
 
       {needsInputTask && (
-        <ThemedView type="backgroundElement" style={styles.nudgeCard}>
-          <ThemedText type="smallBold">Needs your input</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
+        <Card accentColor={StatusColors.brand} style={styles.nudgeCard}>
+          <View style={styles.nudgeHeader}>
+            <Ionicons name="sparkles-outline" size={20} color={StatusColors.brand} />
+            <ThemedText type="cardTitle">Needs your input</ThemedText>
+          </View>
+          <ThemedText type="meta" themeColor="textSecondary">
             {needsInputTask.title} is your lowest-priority item this week — it still fits, but review it
             if your plans change.
           </ThemedText>
-          <Pressable onPress={() => router.push('/(tabs)/calendar')}>
-            <ThemedText type="link" themeColor="text">
-              Review in Calendar
-            </ThemedText>
-          </Pressable>
-        </ThemedView>
+          <Button
+            label="Review in Calendar"
+            variant="outlined"
+            onPress={() => router.push('/(tabs)/calendar')}
+            style={styles.nudgeButton}
+          />
+        </Card>
       )}
 
-      <Pressable style={styles.addButton} onPress={() => router.push('/task-entry')}>
-        <ThemedText style={styles.addButtonText}>+ Add task</ThemedText>
-      </Pressable>
+      <Button label="+ Add task" onPress={() => router.push('/task-entry')} style={styles.addButton} />
     </ScrollView>
   );
 }
@@ -123,60 +144,50 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
     gap: Spacing.three,
   },
-  pageTitle: {
-    fontSize: 28,
-    lineHeight: 34,
-  },
-  healthBadge: {
-    borderRadius: Spacing.two,
-    padding: Spacing.three,
-    gap: Spacing.half,
-  },
-  healthBadgeText: {
-    color: '#ffffff',
+  healthCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two,
   },
   missedCard: {
-    borderRadius: Spacing.two,
-    padding: Spacing.three,
-    backgroundColor: '#FBE4E2',
-    gap: Spacing.half,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two,
   },
-  sectionTitle: {
-    fontSize: 20,
-    lineHeight: 26,
+  healthTextGroup: {
+    flex: 1,
+    gap: 2,
+    backgroundColor: 'transparent',
+  },
+  sectionSpacing: {
     marginTop: Spacing.two,
   },
-  taskRow: {
-    borderRadius: Spacing.two,
-    padding: Spacing.three,
+  taskCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     gap: Spacing.two,
   },
-  taskRowMain: {
+  taskCardMain: {
     flex: 1,
-    gap: Spacing.half,
+    gap: 2,
     backgroundColor: 'transparent',
   },
-  markMissedButton: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.two,
+  missedButton: {
+    paddingHorizontal: Spacing.three,
   },
   nudgeCard: {
-    borderRadius: Spacing.two,
-    padding: Spacing.three,
-    gap: Spacing.half,
+    gap: Spacing.two,
+  },
+  nudgeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  nudgeButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.three,
   },
   addButton: {
-    backgroundColor: '#3C87F7',
-    borderRadius: Spacing.two,
-    paddingVertical: Spacing.three,
-    alignItems: 'center',
     marginTop: Spacing.two,
-  },
-  addButtonText: {
-    color: '#ffffff',
-    fontWeight: '600',
   },
 });

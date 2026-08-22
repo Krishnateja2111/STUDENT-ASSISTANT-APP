@@ -4,7 +4,20 @@ import { Fonts, ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export type ThemedTextProps = TextProps & {
-  type?: 'default' | 'title' | 'small' | 'smallBold' | 'subtitle' | 'link' | 'linkPrimary' | 'code';
+  type?:
+    | 'default'
+    | 'title'
+    | 'small'
+    | 'smallBold'
+    | 'subtitle'
+    | 'link'
+    | 'linkPrimary'
+    | 'code'
+    | 'screenTitle'
+    | 'sectionTitle'
+    | 'cardTitle'
+    | 'meta'
+    | 'keyNumber';
   themeColor?: ThemeColor;
 };
 
@@ -23,6 +36,11 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
         type === 'link' && styles.link,
         type === 'linkPrimary' && styles.linkPrimary,
         type === 'code' && styles.code,
+        type === 'screenTitle' && styles.screenTitle,
+        type === 'sectionTitle' && styles.sectionTitle,
+        type === 'cardTitle' && styles.cardTitle,
+        type === 'meta' && styles.meta,
+        type === 'keyNumber' && styles.keyNumber,
         style,
       ]}
       {...rest}
@@ -69,5 +87,30 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontWeight: Platform.select({ android: 700 }) ?? 500,
     fontSize: 12,
+  },
+  screenTitle: {
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: 700,
+  },
+  sectionTitle: {
+    fontSize: 19,
+    lineHeight: 24,
+    fontWeight: 700,
+  },
+  cardTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: 600,
+  },
+  meta: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: 500,
+  },
+  keyNumber: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: 700,
   },
 });
