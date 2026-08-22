@@ -2,6 +2,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 
 import {
   explainChanges,
+  generateSchedule,
   getScheduleHealth,
   rescheduleAfterMiss,
   type Course,
@@ -11,12 +12,7 @@ import {
   type ScheduleHealth,
   type Task,
 } from '@/lib/scheduling';
-import {
-  mockAvailability,
-  mockCourses,
-  mockScheduledBlocks,
-  mockTasks,
-} from '@/lib/scheduling/mockData';
+import { seedAvailability, seedCourses, seedTasks } from '@/state/seed-data';
 
 /**
  * TODO(state-management): this is a plain React Context stand-in so the 5
@@ -48,14 +44,20 @@ interface AppState {
 
 const AppStateContext = createContext<AppState | null>(null);
 
+function isSchedulable(task: Task): boolean {
+  return task.status === 'pending' || task.status === 'scheduled';
+}
+
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [isAuthed, setIsAuthed] = useState(false);
-  const [tasks, setTasks] = useState<Task[]>(mockTasks);
-  const [scheduledBlocks, setScheduledBlocks] = useState<ScheduledBlock[]>(mockScheduledBlocks);
+  const [tasks, setTasks] = useState<Task[]>(seedTasks);
+  const [scheduledBlocks, setScheduledBlocks] = useState<ScheduledBlock[]>(
+    () => generateSchedule(seedTasks.filter(isSchedulable), seedAvailability).scheduled
+  );
   const [pendingReschedule, setPendingReschedule] = useState<RescheduleResult | null>(null);
   const [pendingExplanations, setPendingExplanations] = useState<ExplanationEntry[]>([]);
 
-  const health = useMemo(() => getScheduleHealth(tasks, mockAvailability), [tasks]);
+  const health = useMemo(() => getScheduleHealth(tasks, seedAvailability), [tasks]);
 
   const value = useMemo<AppState>(
     () => ({
@@ -63,7 +65,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       login: () => setIsAuthed(true),
       logout: () => setIsAuthed(false),
 
-      courses: mockCourses,
+      courses: seedCourses,
       tasks,
       addTask: (task) =>
         setTasks((prev) => [...prev, { ...task, id: `task-${Date.now()}`, status: 'pending' }]),
@@ -80,9 +82,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         const missedTask = tasks.find((t) => t.id === taskId);
         if (!missedTask) return;
         setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: 'missed' } : t)));
-        const result = rescheduleAfterMiss(missedTask, tasks, mockAvailability);
+        const result = rescheduleAfterMiss(missedTask, tasks, seedAvailability);
         setPendingReschedule(result);
-        setPendingExplanations(explainChanges(result));
+        setPendingExplanations(explainChanges(result, tasks));
       },
       acceptReschedule: () => {
         if (!pendingReschedule) return;

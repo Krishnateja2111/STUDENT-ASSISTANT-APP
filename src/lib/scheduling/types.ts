@@ -40,6 +40,12 @@ export interface ScheduledBlock {
   end: string; // ISO 8601
 }
 
+export interface GenerateScheduleResult {
+  scheduled: ScheduledBlock[];
+  /** Tasks that could not be fully placed before their deadline given available time. */
+  overflow: Task[];
+}
+
 /**
  * Why a change happened, as data — never free text. Human-readable text is
  * generated deterministically from this + task data in explainChanges().
