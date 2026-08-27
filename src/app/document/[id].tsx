@@ -4,8 +4,9 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing, StatusColors } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { fileTypeMeta } from '@/lib/file-type-meta';
 import { formatFileSize } from '@/lib/pick-document';
 import { useAppState } from '@/state/app-state';
 import { useContentState } from '@/state/content-state';
@@ -30,13 +31,13 @@ export default function DocumentDetailScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Stack.Screen options={{ title: doc.fileName }} />
+      <Stack.Screen options={{ title: '' }} />
 
       {isImage ? (
         <Image source={{ uri: doc.uri }} style={styles.previewImage} contentFit="contain" />
       ) : (
-        <View style={[styles.previewPlaceholder, { backgroundColor: theme.backgroundSelected }]}>
-          <Ionicons name="document-text-outline" size={64} color={StatusColors.brand} />
+        <View style={[styles.previewPlaceholder, { backgroundColor: `${fileTypeMeta(doc.mimeType).color}14` }]}>
+          <Ionicons name={fileTypeMeta(doc.mimeType).icon} size={64} color={fileTypeMeta(doc.mimeType).color} />
         </View>
       )}
 

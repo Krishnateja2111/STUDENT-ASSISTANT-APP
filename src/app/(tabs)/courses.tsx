@@ -1,44 +1,68 @@
 import { router } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { EmptyState } from '@/components/empty-state';
+import { ProgressBar } from '@/components/progress-bar';
+import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { getCourseAccent } from '@/lib/course-accent';
 import { useAppState } from '@/state/app-state';
-import { useContentState } from '@/state/content-state';
+
+function courseCode(name: string): string {
+  const firstToken = name.split(/[\s–-]+/).find(Boolean) ?? name;
+  return firstToken.slice(0, 4).toUpperCase();
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 export default function CoursesScreen() {
   const { courses, tasks } = useAppState();
-  const { documents } = useContentState();
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <ThemedText type="screenTitle">Courses</ThemedText>
+      <ScreenHeader title="Courses" />
 
       {courses.map((course) => {
-        const taskCount = tasks.filter((t) => t.courseId === course.id).length;
-        const documentCount = documents.filter((d) => d.courseId === course.id).length;
+        const courseTasks = tasks.filter((t) => t.courseId === course.id);
+        const completedTasks = courseTasks.filter((t) => t.status === 'completed');
+        const progressPct = courseTasks.length > 0 ? (completedTasks.length / courseTasks.length) * 100 : 0;
+        const upcoming = courseTasks
+          .filter((t) => t.status !== 'completed')
+          .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+        const accent = getCourseAccent(course.id, courses);
+
         return (
           <Pressable key={course.id} onPress={() => router.push(`/course/${course.id}`)}>
-            <Card accentColor={getCourseAccent(course.id, courses)} style={styles.courseCard}>
-              <ThemedText type="cardTitle">{course.name}</ThemedText>
-              <ThemedText type="meta" themeColor="textSecondary">
-                {taskCount} task{taskCount === 1 ? '' : 's'} · {documentCount} document
-                {documentCount === 1 ? '' : 's'}
-              </ThemedText>
+            <Card style={styles.courseCard}>
+              <View style={styles.topRow}>
+                <View style={[styles.badge, { backgroundColor: `${accent}1A` }]}>
+                  <ThemedText type="smallBold" style={{ color: accent }}>
+                    {courseCode(course.name)}
+                  </ThemedText>
+                </View>
+                <View style={styles.titleGroup}>
+                  <ThemedText type="cardTitle">{course.name}</ThemedText>
+                  <ThemedText type="meta" themeColor="textSecondary">
+                    {courseTasks.length} task{courseTasks.length === 1 ? '' : 's'}
+                    {upcoming ? ` · Next: ${formatDate(upcoming.dueDate)}` : ''}
+                  </ThemedText>
+                </View>
+                <ThemedText type="smallBold" themeColor="textSecondary">
+                  {Math.round(progressPct)}%
+                </ThemedText>
+              </View>
+              <ProgressBar value={progressPct} color={accent} />
             </Card>
           </Pressable>
         );
       })}
 
-      {courses.length === 0 && (
-        <ThemedView style={styles.emptyState}>
-          <ThemedText themeColor="textSecondary">No courses yet.</ThemedText>
-        </ThemedView>
-      )}
+      {courses.length === 0 && <EmptyState icon="school-outline" message="No courses yet." />}
 
       <Button label="+ Add course" onPress={() => router.push('/course-entry')} style={styles.addButton} />
     </ScrollView>
@@ -51,11 +75,23 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   courseCard: {
-    gap: 2,
+    gap: Spacing.two,
   },
-  emptyState: {
-    paddingVertical: Spacing.four,
+  topRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.two,
+  },
+  badge: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleGroup: {
+    flex: 1,
+    gap: 2,
   },
   addButton: {
     marginTop: Spacing.two,

@@ -2,8 +2,11 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
+import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { ListRow } from '@/components/list-row';
+import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -20,6 +23,7 @@ export default function ProfileScreen() {
   const [email, setEmail] = useState(profile.email);
 
   const totalTasks = tasks.length;
+  const activeTasks = tasks.filter((t) => t.status === 'pending' || t.status === 'scheduled').length;
   const completedTasks = tasks.filter((t) => t.status === 'completed').length;
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
@@ -35,7 +39,7 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <ThemedText type="screenTitle">Profile</ThemedText>
+      <ScreenHeader title="Profile" />
 
       <Card style={styles.identityCard}>
         {editing ? (
@@ -68,21 +72,25 @@ export default function ProfileScreen() {
             </View>
           </>
         ) : (
-          <>
-            <ThemedText type="cardTitle">{profile.name}</ThemedText>
-            <ThemedText type="meta" themeColor="textSecondary">
-              {profile.email || 'No email set'}
-            </ThemedText>
-            <Button
-              label="Edit profile"
-              variant="outlined"
-              onPress={() => setEditing(true)}
-              style={styles.editProfileButton}
-            />
-          </>
+          <View style={styles.identityRow}>
+            <Avatar name={profile.name} />
+            <View style={styles.identityText}>
+              <ThemedText type="cardTitle">{profile.name}</ThemedText>
+              <ThemedText type="meta" themeColor="textSecondary">
+                Student
+              </ThemedText>
+              <ThemedText type="meta" themeColor="textSecondary">
+                {profile.email || 'No email set'}
+              </ThemedText>
+            </View>
+            <Button label="Edit" variant="outlined" onPress={() => setEditing(true)} style={styles.editButton} />
+          </View>
         )}
       </Card>
 
+      <ThemedText type="meta" themeColor="textMuted" style={styles.sectionLabel}>
+        ACADEMIC OVERVIEW
+      </ThemedText>
       <View style={styles.statsRow}>
         <Card style={styles.statCard}>
           <ThemedText type="keyNumber">{courses.length}</ThemedText>
@@ -91,9 +99,9 @@ export default function ProfileScreen() {
           </ThemedText>
         </Card>
         <Card style={styles.statCard}>
-          <ThemedText type="keyNumber">{totalTasks}</ThemedText>
+          <ThemedText type="keyNumber">{activeTasks}</ThemedText>
           <ThemedText type="meta" themeColor="textSecondary">
-            Tasks
+            Active tasks
           </ThemedText>
         </Card>
         <Card style={styles.statCard}>
@@ -104,14 +112,13 @@ export default function ProfileScreen() {
         </Card>
       </View>
 
-      <Button
-        label="App Settings"
-        variant="outlined"
-        onPress={() => router.push('/settings')}
-        style={styles.settingsButton}
-      />
+      <Card style={styles.settingsCard}>
+        <ListRow icon="person-outline" label="Personal information" description="Name and email" onPress={() => setEditing(true)} />
+        <ListRow icon="notifications-outline" label="Notifications" description="Reminders and summaries" onPress={() => router.push('/settings')} />
+        <ListRow icon="time-outline" label="Study availability" description="When you can be scheduled" onPress={() => router.push('/settings')} />
+      </Card>
 
-      <Button label="Sign out" variant="outlined" color={StatusColors.danger} onPress={handleSignOut} />
+      <Button label="Sign out" variant="outlined" color={StatusColors.danger} onPress={handleSignOut} style={styles.signOutButton} />
     </ScrollView>
   );
 }
@@ -123,6 +130,18 @@ const styles = StyleSheet.create({
   },
   identityCard: {
     gap: Spacing.two,
+  },
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  identityText: {
+    flex: 1,
+    gap: 1,
+  },
+  editButton: {
+    paddingHorizontal: Spacing.three,
   },
   input: {
     borderWidth: 1,
@@ -138,8 +157,8 @@ const styles = StyleSheet.create({
   flexButton: {
     flex: 1,
   },
-  editProfileButton: {
-    alignSelf: 'flex-start',
+  sectionLabel: {
+    letterSpacing: 0.6,
     marginTop: Spacing.one,
   },
   statsRow: {
@@ -151,7 +170,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 2,
   },
-  settingsButton: {
+  settingsCard: {
+    gap: Spacing.one,
+  },
+  signOutButton: {
     marginTop: Spacing.two,
   },
 });

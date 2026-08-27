@@ -1,8 +1,8 @@
-import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { router, Stack } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
 import { MinTouchTarget, Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -43,6 +43,25 @@ export default function TaskEntryScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <Stack.Screen
+        options={{
+          headerLeft: () => (
+            <Pressable onPress={() => router.back()} hitSlop={8} style={styles.headerAction}>
+              <ThemedText type="default" themeColor="textSecondary">
+                Cancel
+              </ThemedText>
+            </Pressable>
+          ),
+          headerRight: () => (
+            <Pressable onPress={handleSave} disabled={!canSave} hitSlop={8} style={styles.headerAction}>
+              <ThemedText type="default" style={{ color: canSave ? StatusColors.brand : theme.textMuted, fontWeight: '700' }}>
+                Save
+              </ThemedText>
+            </Pressable>
+          ),
+        }}
+      />
+
       <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
         TITLE
       </ThemedText>
@@ -138,7 +157,15 @@ export default function TaskEntryScreen() {
         onChangeText={setEstimatedMinutes}
       />
 
-      <Button label="Save task" onPress={handleSave} disabled={!canSave} style={styles.saveButton} />
+      <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
+        PRIORITY
+      </ThemedText>
+      <View style={[styles.priorityRow, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]}>
+        <Ionicons name="sparkles-outline" size={16} color={theme.textSecondary} />
+        <ThemedText type="small" themeColor="textSecondary">
+          Automatically calculated from deadline and task type
+        </ThemedText>
+      </View>
     </ScrollView>
   );
 }
@@ -176,7 +203,20 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
   },
-  saveButton: {
-    marginTop: Spacing.four,
+  headerAction: {
+    minHeight: MinTouchTarget,
+    minWidth: MinTouchTarget,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.two,
+  },
+  priorityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.three,
+    marginBottom: Spacing.four,
   },
 });

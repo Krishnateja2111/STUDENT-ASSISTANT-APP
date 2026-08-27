@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing, StatusColors } from '@/constants/theme';
 import { getCourseAccent } from '@/lib/course-accent';
+import { formatMinutes } from '@/lib/format-duration';
 import { ReasonCode, type ScheduledBlock } from '@/lib/scheduling';
 import { useAppState } from '@/state/app-state';
 
@@ -41,11 +42,8 @@ function formatBlockTime(block?: ScheduledBlock) {
 }
 
 function formatDuration(block: ScheduledBlock): string {
-  const minutes = Math.round((new Date(block.end).getTime() - new Date(block.start).getTime()) / 60_000);
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+  const minutes = (new Date(block.end).getTime() - new Date(block.start).getTime()) / 60_000;
+  return formatMinutes(minutes);
 }
 
 export default function RescheduleScreen() {

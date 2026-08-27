@@ -1,10 +1,9 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
-import { CourseAccentPalette, Radius, Spacing } from '@/constants/theme';
+import { CourseAccentPalette, Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAppState } from '@/state/app-state';
 
@@ -32,6 +31,27 @@ export default function CourseEntryScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <Stack.Screen
+        options={{
+          headerLeft: () => (
+            <Pressable onPress={() => router.back()} hitSlop={8} style={styles.headerAction}>
+              <ThemedText type="default" themeColor="textSecondary">
+                Cancel
+              </ThemedText>
+            </Pressable>
+          ),
+          headerRight: () => (
+            <Pressable onPress={handleSave} disabled={!canSave} hitSlop={8} style={styles.headerAction}>
+              <ThemedText
+                type="default"
+                style={{ color: canSave ? StatusColors.brand : theme.textMuted, fontWeight: '700' }}>
+                Save
+              </ThemedText>
+            </Pressable>
+          ),
+        }}
+      />
+
       <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
         COURSE NAME
       </ThemedText>
@@ -62,13 +82,6 @@ export default function CourseEntryScreen() {
           </Pressable>
         ))}
       </View>
-
-      <Button
-        label={existing ? 'Save changes' : 'Add course'}
-        onPress={handleSave}
-        disabled={!canSave}
-        style={styles.saveButton}
-      />
     </ScrollView>
   );
 }
@@ -106,7 +119,10 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: Radius.pill,
   },
-  saveButton: {
-    marginTop: Spacing.four,
+  headerAction: {
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.two,
   },
 });

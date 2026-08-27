@@ -49,6 +49,9 @@ interface AppState {
   pendingExplanations: ExplanationEntry[];
   markMissed: (taskId: string) => void;
   acceptReschedule: () => void;
+
+  /** Summary of the most recently accepted reschedule, for the Dashboard's "recently adjusted" note. */
+  lastAcceptedChange: { taskTitle: string; newBlock: ScheduledBlock } | null;
 }
 
 const AppStateContext = createContext<AppState | null>(null);
@@ -67,6 +70,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   );
   const [pendingReschedule, setPendingReschedule] = useState<RescheduleResult | null>(null);
   const [pendingExplanations, setPendingExplanations] = useState<ExplanationEntry[]>([]);
+  const [lastAcceptedChange, setLastAcceptedChange] = useState<AppState['lastAcceptedChange']>(null);
 
   const health = useMemo(() => getScheduleHealth(tasks, availability), [tasks, availability]);
 
@@ -114,12 +118,29 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       },
       acceptReschedule: () => {
         if (!pendingReschedule) return;
+        const changed = pendingReschedule.changes.find((c) => c.newBlock);
+        if (changed?.newBlock) {
+          const changedTask = tasks.find((t) => t.id === changed.taskId);
+          setLastAcceptedChange({ taskTitle: changedTask?.title ?? 'Task', newBlock: changed.newBlock });
+        }
         setScheduledBlocks(pendingReschedule.scheduledBlocks);
         setPendingReschedule(null);
         setPendingExplanations([]);
       },
+
+      lastAcceptedChange,
     }),
-    [isAuthed, courses, tasks, scheduledBlocks, availability, health, pendingReschedule, pendingExplanations]
+    [
+      isAuthed,
+      courses,
+      tasks,
+      scheduledBlocks,
+      availability,
+      health,
+      pendingReschedule,
+      pendingExplanations,
+      lastAcceptedChange,
+    ]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
