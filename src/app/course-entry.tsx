@@ -2,9 +2,11 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { ThemedText } from '@/components/themed-text';
 import { CourseAccentPalette, Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { useAppState } from '@/state/app-state';
 
 export default function CourseEntryScreen() {
@@ -14,8 +16,16 @@ export default function CourseEntryScreen() {
 
   const existing = id ? courses.find((c) => c.id === id) : undefined;
 
-  const [name, setName] = useState(existing?.name ?? '');
-  const [colorTag, setColorTag] = useState(existing?.colorTag ?? CourseAccentPalette[0]);
+  const [initial] = useState(() => ({
+    name: existing?.name ?? '',
+    colorTag: existing?.colorTag ?? CourseAccentPalette[0],
+  }));
+
+  const [name, setName] = useState(initial.name);
+  const [colorTag, setColorTag] = useState(initial.colorTag);
+
+  const hasChanges = name !== initial.name || colorTag !== initial.colorTag;
+  const { showDiscardDialog, confirmDiscard, cancelDiscard, leaveWithoutPrompt } = useUnsavedChangesGuard(hasChanges);
 
   const canSave = name.trim().length > 0;
 
@@ -26,6 +36,7 @@ export default function CourseEntryScreen() {
     } else {
       addCourse({ name: name.trim(), colorTag });
     }
+    leaveWithoutPrompt();
     router.back();
   };
 
@@ -82,6 +93,17 @@ export default function CourseEntryScreen() {
           </Pressable>
         ))}
       </View>
+
+      <ConfirmDialog
+        visible={showDiscardDialog}
+        title="Discard changes?"
+        description="You have unsaved changes. Are you sure you want to leave?"
+        cancelLabel="Keep Editing"
+        confirmLabel="Discard"
+        destructive
+        onConfirm={confirmDiscard}
+        onCancel={cancelDiscard}
+      />
     </ScrollView>
   );
 }

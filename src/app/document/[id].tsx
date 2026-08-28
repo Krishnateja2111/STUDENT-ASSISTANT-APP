@@ -1,10 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { Button } from '@/components/button';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { fileTypeMeta } from '@/lib/file-type-meta';
 import { formatFileSize } from '@/lib/pick-document';
@@ -14,8 +17,9 @@ import { useContentState } from '@/state/content-state';
 export default function DocumentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { courses } = useAppState();
-  const { documents } = useContentState();
+  const { documents, removeDocument } = useContentState();
   const theme = useTheme();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const doc = documents.find((d) => d.id === id);
   const courseName = doc ? (courses.find((c) => c.id === doc.courseId)?.name ?? 'Unknown course') : '';
@@ -67,6 +71,28 @@ export default function DocumentDetailScreen() {
         </ThemedText>
         <ThemedText type="default">{doc.mimeType}</ThemedText>
       </View>
+
+      <Button
+        label="Delete document"
+        variant="outlined"
+        color={StatusColors.danger}
+        onPress={() => setShowDeleteConfirm(true)}
+        style={styles.deleteButton}
+      />
+
+      <ConfirmDialog
+        visible={showDeleteConfirm}
+        title="Delete document?"
+        description={`"${doc.fileName}" will be permanently removed. This can't be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          removeDocument(doc.id);
+          setShowDeleteConfirm(false);
+          router.back();
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </ScrollView>
   );
 }
@@ -96,5 +122,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: Spacing.two,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  deleteButton: {
+    marginTop: Spacing.three,
   },
 });

@@ -1,16 +1,22 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+
+import { readPersisted, writePersisted } from '@/lib/storage';
 
 /**
  * Phase 2 ("accessory ring") state — documents and profile identity. Kept
  * separate from app-state.tsx: these are new concepts with no pre-existing
  * counterpart there, unlike courses/availability which were natural
- * extensions of state app-state.tsx already held.
+ * extensions of state app-state.tsx already held. All of it (documents,
+ * profile, notificationPrefs) now persists locally via AsyncStorage — see
+ * loadPersistedContentState().
  *
  * TODO(profile): Auth's email/password inputs aren't wired to any shared
  * state (see auth.tsx), so profile identity here is a separate, locally
  * editable placeholder — not literally "what you typed in Auth." Unifying
  * them would mean touching auth.tsx.
  */
+
+const CONTENT_STATE_STORAGE_KEY = 'student-assistant:content-state';
 
 export interface StudentDocument {
   id: string;
@@ -36,6 +42,9 @@ export interface NotificationPrefs {
 interface ContentState {
   documents: StudentDocument[];
   addDocument: (doc: Omit<StudentDocument, 'id'>) => void;
+  removeDocument: (id: string) => void;
+  /** Cascade cleanup for app-state's removeCourse — a separate Context, so callers invoke both. */
+  removeDocumentsByCourse: (courseId: string) => void;
 
   profile: StudentProfile;
   updateProfile: (updates: Partial<StudentProfile>) => void;
@@ -45,20 +54,66 @@ interface ContentState {
   updateNotificationPrefs: (updates: Partial<NotificationPrefs>) => void;
 }
 
+/** The subset of ContentState that's durable — this Context holds nothing transient beyond these three. */
+export interface PersistedContentState {
+  documents: StudentDocument[];
+  profile: StudentProfile;
+  notificationPrefs: NotificationPrefs;
+}
+
+function isValidPersistedContentState(value: unknown): value is PersistedContentState {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return (
+    Array.isArray(v.documents) &&
+    !!v.profile &&
+    typeof v.profile === 'object' &&
+    !!v.notificationPrefs &&
+    typeof v.notificationPrefs === 'object'
+  );
+}
+
+/** Reads persisted content data, if any valid data exists. Never throws — see readPersisted. */
+export async function loadPersistedContentState(): Promise<PersistedContentState | null> {
+  const data = await readPersisted<unknown>(CONTENT_STATE_STORAGE_KEY);
+  return isValidPersistedContentState(data) ? data : null;
+}
+
 const ContentStateContext = createContext<ContentState | null>(null);
 
-export function ContentStateProvider({ children }: { children: ReactNode }) {
-  const [documents, setDocuments] = useState<StudentDocument[]>([]);
-  const [profile, setProfile] = useState<StudentProfile>({ name: 'Student', email: '' });
-  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs>({
-    deadlineReminders: true,
-    dailyPlanSummary: false,
-  });
+const DEFAULT_PROFILE: StudentProfile = { name: 'Student', email: '' };
+const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = { deadlineReminders: true, dailyPlanSummary: false };
+
+export function ContentStateProvider({
+  children,
+  initialData,
+}: {
+  children: ReactNode;
+  /** Resolved by RootLayout before this provider ever mounts — null means no valid persisted data existed, so defaults are used. */
+  initialData: PersistedContentState | null;
+}) {
+  const [documents, setDocuments] = useState<StudentDocument[]>(initialData?.documents ?? []);
+  const [profile, setProfile] = useState<StudentProfile>(initialData?.profile ?? DEFAULT_PROFILE);
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs>(
+    initialData?.notificationPrefs ?? DEFAULT_NOTIFICATION_PREFS
+  );
+
+  const skipNextPersist = useRef(true);
+  useEffect(() => {
+    if (skipNextPersist.current) {
+      skipNextPersist.current = false;
+      return;
+    }
+    writePersisted<PersistedContentState>(CONTENT_STATE_STORAGE_KEY, { documents, profile, notificationPrefs });
+  }, [documents, profile, notificationPrefs]);
 
   const value = useMemo<ContentState>(
     () => ({
       documents,
       addDocument: (doc) => setDocuments((prev) => [...prev, { ...doc, id: `doc-${Date.now()}` }]),
+      removeDocument: (id) => setDocuments((prev) => prev.filter((d) => d.id !== id)),
+      removeDocumentsByCourse: (courseId) =>
+        setDocuments((prev) => prev.filter((d) => d.courseId !== courseId)),
 
       profile,
       updateProfile: (updates) => setProfile((prev) => ({ ...prev, ...updates })),

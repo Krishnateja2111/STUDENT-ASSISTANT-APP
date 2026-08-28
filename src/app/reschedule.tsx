@@ -56,6 +56,12 @@ export default function RescheduleScreen() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Recovery is applied all-at-once by Done/acceptReschedule — there is no
+  // per-task partial commit in the state layer. Per-card review below is a
+  // real gate on Done (not decorative): it just doesn't independently apply
+  // anything on its own, which the label and disabled state now make clear.
+  const allReviewed = pendingExplanations.length > 0 && acceptedIds.size >= pendingExplanations.length;
+
   const taskTitle = (taskId: string) => tasks.find((t) => t.id === taskId)?.title ?? 'Task';
   const courseName = (courseId: string) => courses.find((c) => c.id === courseId)?.name ?? 'Unknown course';
   const courseAccent = (taskId: string) => {
@@ -151,7 +157,7 @@ export default function RescheduleScreen() {
 
               <View style={styles.actions}>
                 <Button
-                  label={accepted ? 'Accepted ✓' : 'Accept New Time'}
+                  label={accepted ? 'Reviewed ✓' : 'Review This Change'}
                   variant="filled"
                   color={accepted ? StatusColors.success : StatusColors.brand}
                   onPress={() => setAcceptedIds((prev) => new Set(prev).add(entry.taskId))}
@@ -205,8 +211,14 @@ export default function RescheduleScreen() {
         </Card>
       </ScrollView>
 
+      <ThemedText type="small" themeColor="textSecondary" style={styles.doneHint}>
+        {allReviewed
+          ? 'Applies every change above at once.'
+          : `Review ${pendingExplanations.length > 1 ? 'each change' : 'the change'} above to continue.`}
+      </ThemedText>
       <Button
-        label="Done"
+        label="Accept All Changes"
+        disabled={!allReviewed}
         onPress={() => {
           acceptReschedule();
           router.replace('/(tabs)/dashboard');
@@ -318,7 +330,13 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
+  doneHint: {
+    textAlign: 'center',
+    marginHorizontal: Spacing.four,
+    marginTop: Spacing.two,
+  },
   doneButton: {
     margin: Spacing.four,
+    marginTop: Spacing.two,
   },
 });

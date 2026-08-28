@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { ListRow } from '@/components/list-row';
 import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
@@ -21,18 +22,35 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [showDiscardProfileEdit, setShowDiscardProfileEdit] = useState(false);
 
   const totalTasks = tasks.length;
   const activeTasks = tasks.filter((t) => t.status === 'pending' || t.status === 'scheduled').length;
   const completedTasks = tasks.filter((t) => t.status === 'completed').length;
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
+  const startEditing = () => {
+    setName(profile.name);
+    setEmail(profile.email);
+    setEditing(true);
+  };
+
   const handleSaveProfile = () => {
     updateProfile({ name: name.trim() || 'Student', email: email.trim() });
     setEditing(false);
   };
 
+  const handleCancelEdit = () => {
+    if (name !== profile.name || email !== profile.email) {
+      setShowDiscardProfileEdit(true);
+    } else {
+      setEditing(false);
+    }
+  };
+
   const handleSignOut = () => {
+    setShowSignOutConfirm(false);
     logout();
     router.replace('/auth');
   };
@@ -68,7 +86,7 @@ export default function ProfileScreen() {
             />
             <View style={styles.editActions}>
               <Button label="Save" onPress={handleSaveProfile} style={styles.flexButton} />
-              <Button label="Cancel" variant="outlined" onPress={() => setEditing(false)} style={styles.flexButton} />
+              <Button label="Cancel" variant="outlined" onPress={handleCancelEdit} style={styles.flexButton} />
             </View>
           </>
         ) : (
@@ -83,7 +101,7 @@ export default function ProfileScreen() {
                 {profile.email || 'No email set'}
               </ThemedText>
             </View>
-            <Button label="Edit" variant="outlined" onPress={() => setEditing(true)} style={styles.editButton} />
+            <Button label="Edit" variant="outlined" onPress={startEditing} style={styles.editButton} />
           </View>
         )}
       </Card>
@@ -113,12 +131,40 @@ export default function ProfileScreen() {
       </View>
 
       <Card style={styles.settingsCard}>
-        <ListRow icon="person-outline" label="Personal information" description="Name and email" onPress={() => setEditing(true)} />
+        <ListRow icon="person-outline" label="Personal information" description="Name and email" onPress={startEditing} />
         <ListRow icon="notifications-outline" label="Notifications" description="Reminders and summaries" onPress={() => router.push('/settings')} />
         <ListRow icon="time-outline" label="Study availability" description="When you can be scheduled" onPress={() => router.push('/settings')} />
       </Card>
 
-      <Button label="Sign out" variant="outlined" color={StatusColors.danger} onPress={handleSignOut} style={styles.signOutButton} />
+      <Button
+        label="Sign out"
+        variant="outlined"
+        color={StatusColors.danger}
+        onPress={() => setShowSignOutConfirm(true)}
+        style={styles.signOutButton}
+      />
+
+      <ConfirmDialog
+        visible={showSignOutConfirm}
+        title="Sign out?"
+        description="You'll need to sign back in to continue. This won't delete any of your courses, tasks, or documents."
+        confirmLabel="Sign Out"
+        onConfirm={handleSignOut}
+        onCancel={() => setShowSignOutConfirm(false)}
+      />
+      <ConfirmDialog
+        visible={showDiscardProfileEdit}
+        title="Discard changes?"
+        description="You have unsaved changes. Are you sure you want to leave?"
+        cancelLabel="Keep Editing"
+        confirmLabel="Discard"
+        destructive
+        onConfirm={() => {
+          setShowDiscardProfileEdit(false);
+          setEditing(false);
+        }}
+        onCancel={() => setShowDiscardProfileEdit(false)}
+      />
     </ScrollView>
   );
 }

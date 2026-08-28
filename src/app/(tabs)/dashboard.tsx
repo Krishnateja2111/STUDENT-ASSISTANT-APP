@@ -15,7 +15,7 @@ import { Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getCourseAccent } from '@/lib/course-accent';
 import { formatMinutes } from '@/lib/format-duration';
-import { REFERENCE_NOW, REFERENCE_TODAY } from '@/lib/reference-date';
+import { getNow, getToday } from '@/lib/reference-date';
 import type { HealthStatus, ScheduledBlock } from '@/lib/scheduling';
 import { useAppState } from '@/state/app-state';
 import { useContentState } from '@/state/content-state';
@@ -25,9 +25,6 @@ const HEALTH_META: Record<HealthStatus, { color: string; icon: keyof typeof Ioni
   yellow: { color: StatusColors.warning, icon: 'alert-circle', label: 'Getting tight' },
   red: { color: StatusColors.danger, icon: 'warning', label: 'Overloaded' },
 };
-
-const TODAY = REFERENCE_TODAY;
-const NOW = REFERENCE_NOW;
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -54,9 +51,11 @@ function greeting(hour: number): string {
 }
 
 export default function DashboardScreen() {
-  const { tasks, courses, scheduledBlocks, health, markMissed, lastAcceptedChange } = useAppState();
+  const { tasks, courses, scheduledBlocks, health, markMissed, markTaskCompleted, lastAcceptedChange } = useAppState();
   const { profile } = useContentState();
   const theme = useTheme();
+  const TODAY = getToday();
+  const NOW = getNow();
 
   const courseName = (courseId: string) => courses.find((c) => c.id === courseId)?.name ?? 'Unknown course';
   const courseAccent = (courseId: string) => getCourseAccent(courseId, courses);
@@ -92,11 +91,20 @@ export default function DashboardScreen() {
         subtitle={formatDayHeading(TODAY)}
         right={
           <>
-            <Pressable onPress={() => router.push('/settings')} hitSlop={8} style={styles.iconButton}>
+            <Pressable
+              onPress={() => router.push('/settings')}
+              hitSlop={8}
+              style={styles.iconButton}
+              accessibilityRole="button"
+              accessibilityLabel="Notification settings">
               <Ionicons name="notifications-outline" size={22} color={theme.text} />
               {missedTasks.length > 0 && <View style={[styles.badgeDot, { borderColor: theme.background }]} />}
             </Pressable>
-            <Pressable onPress={() => router.push('/(tabs)/profile')} hitSlop={4}>
+            <Pressable
+              onPress={() => router.push('/(tabs)/profile')}
+              hitSlop={4}
+              accessibilityRole="button"
+              accessibilityLabel="Open profile">
               <Avatar name={profile.name} size={36} />
             </Pressable>
           </>
@@ -181,7 +189,7 @@ export default function DashboardScreen() {
         {todaysBlocks.map((block) => {
           const task = taskForBlock(block);
           if (!task) return null;
-          const canMarkMissed = task.status !== 'missed' && task.status !== 'completed';
+          const isActive = task.status !== 'missed' && task.status !== 'completed';
           return (
             <ScheduledTaskCard
               key={block.id}
@@ -190,14 +198,23 @@ export default function DashboardScreen() {
               courseName={courseName(task.courseId)}
               accentColor={courseAccent(task.courseId)}
               trailing={
-                canMarkMissed ? (
-                  <Button
-                    label="Missed"
-                    variant="outlined"
-                    color={StatusColors.danger}
-                    onPress={() => handleMarkMissed(task.id)}
-                    style={styles.missedButton}
-                  />
+                isActive ? (
+                  <View style={styles.taskActions}>
+                    <Button
+                      label="Complete"
+                      variant="outlined"
+                      color={StatusColors.success}
+                      onPress={() => markTaskCompleted(task.id)}
+                      style={styles.actionButton}
+                    />
+                    <Button
+                      label="Missed"
+                      variant="outlined"
+                      color={StatusColors.danger}
+                      onPress={() => handleMarkMissed(task.id)}
+                      style={styles.actionButton}
+                    />
+                  </View>
                 ) : (
                   <StatusBadge
                     label={task.status === 'completed' ? 'Completed' : 'Missed'}
@@ -309,7 +326,11 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
-  missedButton: {
+  taskActions: {
+    gap: Spacing.one,
+    alignItems: 'flex-end',
+  },
+  actionButton: {
     paddingHorizontal: Spacing.three,
   },
   adjustedCard: {

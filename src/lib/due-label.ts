@@ -1,5 +1,5 @@
 import { StatusColors } from '@/constants/theme';
-import { REFERENCE_NOW } from '@/lib/reference-date';
+import { getNow } from '@/lib/reference-date';
 
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -9,7 +9,7 @@ function startOfDay(date: Date): Date {
 export function dueLabel(dueDateIso: string): { label: string; color: string } {
   const due = new Date(dueDateIso);
   const dayDiff = Math.round(
-    (startOfDay(due).getTime() - startOfDay(REFERENCE_NOW).getTime()) / (1000 * 60 * 60 * 24)
+    (startOfDay(due).getTime() - startOfDay(getNow()).getTime()) / (1000 * 60 * 60 * 24)
   );
 
   if (dayDiff < 0) return { label: 'Overdue', color: StatusColors.danger };

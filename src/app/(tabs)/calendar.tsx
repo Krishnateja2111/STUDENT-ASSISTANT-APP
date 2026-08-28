@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { ScheduledTaskCard } from '@/components/scheduled-task-card';
 import { ScreenHeader } from '@/components/screen-header';
@@ -9,11 +10,10 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getCourseAccent } from '@/lib/course-accent';
-import { REFERENCE_TODAY } from '@/lib/reference-date';
+import { getToday } from '@/lib/reference-date';
 import type { ScheduledBlock } from '@/lib/scheduling';
 import { useAppState } from '@/state/app-state';
 
-const TODAY = REFERENCE_TODAY;
 const WEEK_LENGTH = 7;
 
 function dayKeyOf(date: Date): string {
@@ -62,8 +62,13 @@ function groupByDay(blocks: ScheduledBlock[]): Record<string, ScheduledBlock[]> 
 
 export default function CalendarScreen() {
   const { tasks, courses, scheduledBlocks, removeScheduledBlock } = useAppState();
+  // Computed once per screen instance (not every render) so the week strip
+  // and default selection stay put for the session rather than shifting
+  // under the user as the clock ticks.
+  const [TODAY] = useState(() => getToday());
   const [expandedBlockId, setExpandedBlockId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState(TODAY);
+  const [pendingRemoveBlockId, setPendingRemoveBlockId] = useState<string | null>(null);
   const theme = useTheme();
 
   const courseName = (courseId: string) => courses.find((c) => c.id === courseId)?.name ?? 'Unknown course';
@@ -135,10 +140,7 @@ export default function CalendarScreen() {
                   label="Remove from schedule"
                   variant="outlined"
                   color={StatusColors.danger}
-                  onPress={() => {
-                    removeScheduledBlock(block.id);
-                    setExpandedBlockId(null);
-                  }}
+                  onPress={() => setPendingRemoveBlockId(block.id)}
                   style={styles.removeButton}
                 />
               )}
@@ -146,6 +148,20 @@ export default function CalendarScreen() {
           );
         })}
       </View>
+
+      <ConfirmDialog
+        visible={pendingRemoveBlockId !== null}
+        title="Remove from schedule?"
+        description="This takes it off the calendar and returns it to your task list, unscheduled — it won't be deleted."
+        confirmLabel="Remove"
+        destructive
+        onConfirm={() => {
+          if (pendingRemoveBlockId) removeScheduledBlock(pendingRemoveBlockId);
+          setPendingRemoveBlockId(null);
+          setExpandedBlockId(null);
+        }}
+        onCancel={() => setPendingRemoveBlockId(null)}
+      />
     </ScrollView>
   );
 }

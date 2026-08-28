@@ -1,11 +1,19 @@
-import { Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import Constants from 'expo-constants';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
+import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
+import { ListRow } from '@/components/list-row';
 import { SectionHeader } from '@/components/section-header';
+import { StatusBadge } from '@/components/status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing, StatusColors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAppState } from '@/state/app-state';
 import { useContentState } from '@/state/content-state';
@@ -21,19 +29,53 @@ function formatRange(startIso: string, endIso: string): string {
 }
 
 export default function SettingsScreen() {
-  const { availability, addAvailabilityBlock, updateAvailabilityBlock, removeAvailabilityBlock } = useAppState();
-  const { notificationPrefs, updateNotificationPrefs } = useContentState();
+  const { availability, addAvailabilityBlock, updateAvailabilityBlock, removeAvailabilityBlock, logout } =
+    useAppState();
+  const { profile } = useContentState();
   const theme = useTheme();
+  const colorScheme = useColorScheme();
+  const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
   const inputStyle = [
     styles.input,
     { color: theme.text, borderColor: theme.border, backgroundColor: theme.background },
   ];
 
+  const appearanceLabel = colorScheme === 'dark' ? 'Dark' : 'Light';
+  const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+
+  const handleSignOut = () => {
+    setShowSignOutConfirm(false);
+    logout();
+    router.replace('/auth');
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.section}>
-        <SectionHeader title="Study availability" />
+        <SectionHeader title="Account" />
+        <Card style={styles.accountCard}>
+          <View style={styles.accountRow}>
+            <Avatar name={profile.name} size={44} />
+            <View style={styles.accountText}>
+              <ThemedText type="cardTitle">{profile.name}</ThemedText>
+              <ThemedText type="meta" themeColor="textSecondary">
+                {profile.email || 'No email set'}
+              </ThemedText>
+            </View>
+          </View>
+          <ListRow
+            icon="person-outline"
+            label="Edit profile"
+            description="Name and email"
+            onPress={() => router.push('/(tabs)/profile')}
+          />
+        </Card>
+      </View>
+
+      <View style={styles.section}>
+        <SectionHeader title="Study preferences" />
         <ThemedText type="meta" themeColor="textSecondary" style={styles.sectionNote}>
           This is the real availability the scheduling engine plans around — changes here affect your
           schedule health and future reschedules right away.
@@ -64,7 +106,7 @@ export default function SettingsScreen() {
               label="Remove"
               variant="outlined"
               color={StatusColors.danger}
-              onPress={() => removeAvailabilityBlock(block.id)}
+              onPress={() => setPendingRemoveId(block.id)}
               style={styles.removeButton}
             />
           </Card>
@@ -86,42 +128,113 @@ export default function SettingsScreen() {
 
       <View style={styles.section}>
         <SectionHeader title="Notifications" />
-        {/* TODO(notifications): UI-only — no real push notification wiring yet. */}
+        <ThemedText type="meta" themeColor="textSecondary" style={styles.sectionNote}>
+          Not built yet — nothing below sends a real notification. Shown here so you know what&apos;s planned.
+        </ThemedText>
         <Card style={styles.notificationCard}>
-          {/* Whole row is tappable, not just the Switch itself — the Switch's
-              native size (~40x20) is well under the 44px touch-target minimum
-              used everywhere else; resizing the control itself would look
-              broken, so the row is the actual hit target instead. */}
-          <Pressable
-            style={styles.notificationRow}
-            onPress={() => updateNotificationPrefs({ deadlineReminders: !notificationPrefs.deadlineReminders })}>
+          <View style={styles.notificationRow}>
             <View style={styles.notificationText}>
-              <ThemedText type="cardTitle">Deadline reminders</ThemedText>
+              <ThemedText type="cardTitle" themeColor="textMuted">
+                Deadline reminders
+              </ThemedText>
               <ThemedText type="meta" themeColor="textSecondary">
                 A nudge before a task is due
               </ThemedText>
             </View>
-            <Switch
-              value={notificationPrefs.deadlineReminders}
-              onValueChange={(value) => updateNotificationPrefs({ deadlineReminders: value })}
-            />
-          </Pressable>
-          <Pressable
-            style={styles.notificationRow}
-            onPress={() => updateNotificationPrefs({ dailyPlanSummary: !notificationPrefs.dailyPlanSummary })}>
+            <StatusBadge label="Coming soon" color={StatusColors.warning} />
+          </View>
+          <View style={styles.notificationRow}>
             <View style={styles.notificationText}>
-              <ThemedText type="cardTitle">Daily plan summary</ThemedText>
+              <ThemedText type="cardTitle" themeColor="textMuted">
+                Daily plan summary
+              </ThemedText>
               <ThemedText type="meta" themeColor="textSecondary">
                 A morning recap of today&apos;s plan
               </ThemedText>
             </View>
-            <Switch
-              value={notificationPrefs.dailyPlanSummary}
-              onValueChange={(value) => updateNotificationPrefs({ dailyPlanSummary: value })}
-            />
-          </Pressable>
+            <StatusBadge label="Coming soon" color={StatusColors.warning} />
+          </View>
         </Card>
       </View>
+
+      <View style={styles.section}>
+        <SectionHeader title="Appearance" />
+        <Card style={styles.infoCard}>
+          <View style={styles.notificationRow}>
+            <View style={styles.notificationText}>
+              <ThemedText type="cardTitle">Theme</ThemedText>
+              <ThemedText type="meta" themeColor="textSecondary">
+                Automatically follows your device&apos;s system setting
+              </ThemedText>
+            </View>
+            <StatusBadge label={appearanceLabel} />
+          </View>
+        </Card>
+      </View>
+
+      <View style={styles.section}>
+        <SectionHeader title="Privacy & security" />
+        <Card style={styles.infoCard}>
+          <ThemedText type="cardTitle">Your data stays on this device</ThemedText>
+          <ThemedText type="meta" themeColor="textSecondary">
+            Courses, tasks, documents, and your profile are stored locally and are never sent to a server.
+          </ThemedText>
+        </Card>
+        <Card style={styles.infoCard}>
+          <View style={styles.notificationRow}>
+            <View style={styles.notificationText}>
+              <ThemedText type="cardTitle" themeColor="textMuted">
+                Password & account security
+              </ThemedText>
+              <ThemedText type="meta" themeColor="textSecondary">
+                Sign-in is not backed by a real account system yet
+              </ThemedText>
+            </View>
+            <StatusBadge label="Coming soon" color={StatusColors.warning} />
+          </View>
+        </Card>
+      </View>
+
+      <View style={styles.section}>
+        <SectionHeader title="About" />
+        <Card style={styles.infoCard}>
+          <ThemedText type="cardTitle">Student Assistant</ThemedText>
+          <ThemedText type="meta" themeColor="textSecondary">
+            Version {appVersion}
+          </ThemedText>
+        </Card>
+      </View>
+
+      <View style={styles.section}>
+        <SectionHeader title="Account actions" />
+        <Button
+          label="Sign out"
+          variant="outlined"
+          color={StatusColors.danger}
+          onPress={() => setShowSignOutConfirm(true)}
+        />
+      </View>
+
+      <ConfirmDialog
+        visible={pendingRemoveId !== null}
+        title="Remove this availability?"
+        description="This time will no longer be considered for scheduling — it can affect upcoming and future schedules."
+        confirmLabel="Remove"
+        destructive
+        onConfirm={() => {
+          if (pendingRemoveId) removeAvailabilityBlock(pendingRemoveId);
+          setPendingRemoveId(null);
+        }}
+        onCancel={() => setPendingRemoveId(null)}
+      />
+      <ConfirmDialog
+        visible={showSignOutConfirm}
+        title="Sign out?"
+        description="You'll need to sign back in to continue. This won't delete any of your courses, tasks, or documents."
+        confirmLabel="Sign Out"
+        onConfirm={handleSignOut}
+        onCancel={() => setShowSignOutConfirm(false)}
+      />
     </ScrollView>
   );
 }
@@ -136,6 +249,18 @@ const styles = StyleSheet.create({
   },
   sectionNote: {
     marginBottom: Spacing.one,
+  },
+  accountCard: {
+    gap: Spacing.two,
+  },
+  accountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  accountText: {
+    flex: 1,
+    gap: 1,
   },
   availabilityCard: {
     gap: Spacing.one,
@@ -156,6 +281,9 @@ const styles = StyleSheet.create({
   },
   notificationCard: {
     gap: Spacing.three,
+  },
+  infoCard: {
+    gap: Spacing.one,
   },
   notificationRow: {
     flexDirection: 'row',

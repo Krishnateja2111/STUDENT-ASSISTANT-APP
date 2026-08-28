@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { StatusBadge } from '@/components/status-badge';
 import { ThemedText } from '@/components/themed-text';
@@ -31,10 +32,13 @@ function formatDate(iso: string) {
 
 export default function CourseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { courses, tasks } = useAppState();
-  const { documents, addDocument } = useContentState();
+  const { courses, tasks, removeCourse } = useAppState();
+  const { documents, addDocument, removeDocumentsByCourse } = useContentState();
   const theme = useTheme();
   const [tab, setTab] = useState<TabKey>('overview');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const course = courses.find((c) => c.id === id);
   const accent = getCourseAccent(id, courses);
@@ -47,9 +51,23 @@ export default function CourseDetailScreen() {
   const courseDocuments = documents.filter((d) => d.courseId === id);
 
   const handleUpload = async () => {
-    const file = await pickDocument();
-    if (!file) return;
-    addDocument({ ...file, courseId: id, uploadedAt: new Date().toISOString() });
+    setUploadError(null);
+    setUploading(true);
+    const result = await pickDocument();
+    setUploading(false);
+    if (result.status === 'error') {
+      setUploadError(result.message);
+      return;
+    }
+    if (result.status === 'cancelled') return;
+    addDocument({ ...result.file, courseId: id, uploadedAt: new Date().toISOString() });
+  };
+
+  const handleDeleteCourse = () => {
+    removeCourse(id);
+    removeDocumentsByCourse(id);
+    setShowDeleteConfirm(false);
+    router.back();
   };
 
   if (!course) {
@@ -69,7 +87,11 @@ export default function CourseDetailScreen() {
         <ThemedText type="screenTitle" style={styles.titleText}>
           {course.name}
         </ThemedText>
-        <Pressable onPress={() => router.push(`/course-entry?id=${course.id}`)} hitSlop={8}>
+        <Pressable
+          onPress={() => router.push(`/course-entry?id=${course.id}`)}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Edit course">
           <Ionicons name="create-outline" size={22} color={theme.textSecondary} />
         </Pressable>
       </View>
@@ -145,18 +167,20 @@ export default function CourseDetailScreen() {
         <View style={styles.section}>
           {courseTasks.length === 0 && <EmptyState icon="checkmark-done-outline" message="No tasks for this course yet." />}
           {courseTasks.map((task) => (
-            <Card key={task.id} accentColor={accent} style={styles.taskCard}>
-              <View style={styles.taskRow}>
-                <ThemedText type="cardTitle" style={styles.taskRowTitle}>
-                  {task.title}
+            <Pressable key={task.id} onPress={() => router.push(`/task-entry?id=${task.id}`)}>
+              <Card accentColor={accent} style={styles.taskCard}>
+                <View style={styles.taskRow}>
+                  <ThemedText type="cardTitle" style={styles.taskRowTitle}>
+                    {task.title}
+                  </ThemedText>
+                  {task.status === 'completed' && <StatusBadge label="Completed" color={StatusColors.success} />}
+                  {task.status === 'missed' && <StatusBadge label="Missed" color={StatusColors.danger} />}
+                </View>
+                <ThemedText type="meta" themeColor="textSecondary">
+                  {TASK_TYPE_LABEL[task.taskType]} · due {formatDate(task.dueDate)}
                 </ThemedText>
-                {task.status === 'completed' && <StatusBadge label="Completed" color={StatusColors.success} />}
-                {task.status === 'missed' && <StatusBadge label="Missed" color={StatusColors.danger} />}
-              </View>
-              <ThemedText type="meta" themeColor="textSecondary">
-                {TASK_TYPE_LABEL[task.taskType]} · due {formatDate(task.dueDate)}
-              </ThemedText>
-            </Card>
+              </Card>
+            </Pressable>
           ))}
         </View>
       )}
@@ -177,9 +201,38 @@ export default function CourseDetailScreen() {
               </Card>
             </Pressable>
           ))}
-          <Button label="Upload document" variant="outlined" onPress={handleUpload} style={styles.uploadButton} />
+          <Button
+            label={uploading ? 'Opening picker…' : 'Upload document'}
+            variant="outlined"
+            disabled={uploading}
+            onPress={handleUpload}
+            style={styles.uploadButton}
+          />
+          {uploadError && (
+            <ThemedText type="small" style={{ color: StatusColors.danger }}>
+              {uploadError}
+            </ThemedText>
+          )}
         </View>
       )}
+
+      <Button
+        label="Delete course"
+        variant="outlined"
+        color={StatusColors.danger}
+        onPress={() => setShowDeleteConfirm(true)}
+        style={styles.deleteButton}
+      />
+
+      <ConfirmDialog
+        visible={showDeleteConfirm}
+        title="Delete course?"
+        description={`This removes "${course.name}" and all of its tasks and documents. This can't be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={handleDeleteCourse}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </ScrollView>
   );
 }
@@ -264,6 +317,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   uploadButton: {
+    marginTop: Spacing.two,
+  },
+  deleteButton: {
     marginTop: Spacing.two,
   },
 });

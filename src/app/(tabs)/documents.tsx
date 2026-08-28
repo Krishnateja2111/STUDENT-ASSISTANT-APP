@@ -8,7 +8,7 @@ import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
 import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getCourseAccent } from '@/lib/course-accent';
 import { fileTypeMeta, type DocumentFilter } from '@/lib/file-type-meta';
@@ -32,6 +32,8 @@ export default function DocumentsScreen() {
   const { documents, addDocument } = useContentState();
   const theme = useTheme();
   const [uploading, setUploading] = useState(false);
+  const [pickerBusy, setPickerBusy] = useState(false);
+  const [pickerError, setPickerError] = useState<string | null>(null);
   const [targetCourseId, setTargetCourseId] = useState(courses[0]?.id ?? '');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<DocumentFilter>('all');
@@ -39,9 +41,16 @@ export default function DocumentsScreen() {
   const courseName = (courseId: string) => courses.find((c) => c.id === courseId)?.name ?? 'Unknown course';
 
   const handlePickFile = async () => {
-    const file = await pickDocument();
-    if (!file) return;
-    addDocument({ ...file, courseId: targetCourseId, uploadedAt: new Date().toISOString() });
+    setPickerError(null);
+    setPickerBusy(true);
+    const result = await pickDocument();
+    setPickerBusy(false);
+    if (result.status === 'error') {
+      setPickerError(result.message);
+      return;
+    }
+    if (result.status === 'cancelled') return;
+    addDocument({ ...result.file, courseId: targetCourseId, uploadedAt: new Date().toISOString() });
     setUploading(false);
   };
 
@@ -62,7 +71,11 @@ export default function DocumentsScreen() {
       <ScreenHeader
         title="Documents"
         right={
-          <Pressable onPress={() => setUploading((v) => !v)} hitSlop={8}>
+          <Pressable
+            onPress={() => setUploading((v) => !v)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Upload document">
             <Ionicons name="cloud-upload-outline" size={24} color={theme.text} />
           </Pressable>
         }
@@ -127,9 +140,27 @@ export default function DocumentsScreen() {
             })}
           </View>
           <View style={styles.uploadActions}>
-            <Button label="Choose file" onPress={handlePickFile} disabled={!targetCourseId} style={styles.flexButton} />
-            <Button label="Cancel" variant="outlined" onPress={() => setUploading(false)} style={styles.flexButton} />
+            <Button
+              label={pickerBusy ? 'Opening picker…' : 'Choose file'}
+              onPress={handlePickFile}
+              disabled={!targetCourseId || pickerBusy}
+              style={styles.flexButton}
+            />
+            <Button
+              label="Cancel"
+              variant="outlined"
+              onPress={() => {
+                setUploading(false);
+                setPickerError(null);
+              }}
+              style={styles.flexButton}
+            />
           </View>
+          {pickerError && (
+            <ThemedText type="small" style={styles.errorText}>
+              {pickerError}
+            </ThemedText>
+          )}
         </Card>
       )}
 
@@ -218,6 +249,9 @@ const styles = StyleSheet.create({
   },
   flexButton: {
     flex: 1,
+  },
+  errorText: {
+    color: StatusColors.danger,
   },
   docCard: {
     flexDirection: 'row',
