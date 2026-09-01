@@ -303,7 +303,37 @@ export function AppStateProvider({
     );
   };
 
-  const health = useMemo(() => getScheduleHealth(tasks, effectiveAvailability), [tasks, effectiveAvailability]);
+  // Bug fix: getScheduleHealth (protected, unmodified) runs its own greedy
+  // placement simulation to determine real feasibility — but that
+  // simulation has no fallback for a task whose deadline has already
+  // elapsed (only rescheduleAfterMiss/replanTasks retry without honoring
+  // the deadline; this one, correctly for its own contract, does not).
+  // ANY task with an already-past dueDate that isn't 'completed' —
+  // 'missed', or 'pending' after a successful recovery (which gives a task
+  // a new block but never changes its original dueDate) — therefore always
+  // overflows, permanently pinning the status to red regardless of how
+  // much real capacity exists for everything else. Reproduced live:
+  // completing 8 of 9 tasks, leaving only one already-past-due missed
+  // task, still showed Overloaded. A deadline that's already gone is a
+  // "did I handle my past" question — already owned by the dedicated
+  // missed-task banner/recovery flow — not a "can I handle what's ahead"
+  // one, which is what this card is actually for; so it's excluded here,
+  // at the caller boundary, rather than changing the protected file's own
+  // contract.
+  // Matches effectiveAvailability's own convention just above: getNow() is
+  // called fresh inside the memo callback (not listed as a dependency),
+  // so this recomputes whenever tasks/availability actually change rather
+  // than on every render — "now" here is only ever as stale as the time
+  // since the last relevant mutation, the same acceptable imprecision the
+  // rest of the app already has (see reference-date.ts).
+  const healthRelevantTasks = useMemo(
+    () => tasks.filter((t) => new Date(t.dueDate).getTime() >= getNow().getTime()),
+    [tasks]
+  );
+  const health = useMemo(
+    () => getScheduleHealth(healthRelevantTasks, effectiveAvailability),
+    [healthRelevantTasks, effectiveAvailability]
+  );
 
   /**
    * Phase 3C — general single-task re-planning orchestration. Re-plans
