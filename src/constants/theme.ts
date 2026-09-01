@@ -7,37 +7,41 @@ import '@/global.css';
 
 import { Platform } from 'react-native';
 
+// Gray / green / bone palette (exploratory, per request) — bone is a warm,
+// muted off-white rather than a cool neutral gray, so both themes lean warm
+// throughout (backgrounds, borders, and text all share the same undertone)
+// instead of mixing a warm background with cool grays.
 export const Colors = {
   light: {
-    text: '#14171A',
-    textSecondary: '#6B7280',
-    textMuted: '#9CA3AF',
-    background: '#F6F6F3',
-    backgroundElement: '#FFFFFF',
-    backgroundSelected: '#EDEEF2',
-    border: '#EBEBE6',
+    text: '#26241F',
+    textSecondary: '#6E6A5F',
+    textMuted: '#9F9A8C',
+    background: '#F4EFE4',
+    backgroundElement: '#FFFDF7',
+    backgroundSelected: '#EAE2D0',
+    border: '#E2D9C4',
   },
   dark: {
-    text: '#F5F5F5',
-    textSecondary: '#A0A4AB',
-    textMuted: '#75797F',
-    background: '#101113',
-    backgroundElement: '#1C1D20',
-    backgroundSelected: '#27292D',
-    border: '#2A2C30',
+    text: '#F2EEE3',
+    textSecondary: '#B2AC9B',
+    textMuted: '#797464',
+    background: '#1B1A16',
+    backgroundElement: '#242219',
+    backgroundSelected: '#2E2B1F',
+    border: '#383527',
   },
 } as const;
 
 /** Sparingly-used status colors: icons/badges/borders only, never a full-width block. */
 export const StatusColors = {
-  success: '#2FA766',
+  success: '#3FAE72',
   warning: '#D89B2A',
-  danger: '#E0524A',
-  brand: '#3C87F7',
+  danger: '#C64B3E',
+  brand: '#3D7A54',
 } as const;
 
-/** Fallback accent palette for courses without an assigned colorTag. */
-export const CourseAccentPalette = ['#3C87F7', '#E0A93C', '#4CAF7D', '#B37FEB', '#F2789F', '#4DB6C6'];
+/** Fallback accent palette for courses without an assigned colorTag — muted/earthy, to stay in the same family as the rest of the palette while still giving courses distinguishable colors. */
+export const CourseAccentPalette = ['#3D7A54', '#B08D57', '#6B7F8C', '#8C7A9E', '#7A9E7E', '#A67C6E'];
 
 export const Radius = {
   sm: 8,
