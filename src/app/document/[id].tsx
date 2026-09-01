@@ -89,7 +89,12 @@ export default function DocumentDetailScreen() {
         onConfirm={() => {
           removeDocument(doc.id);
           setShowDeleteConfirm(false);
-          router.back();
+          // Bug fix: router.back() is a silent no-op with no in-app
+          // navigation history — and the document this screen showed no
+          // longer exists either way, so the documents list is always the
+          // right destination after a delete.
+          if (router.canGoBack()) router.back();
+          else router.replace('/(tabs)/documents');
         }}
         onCancel={() => setShowDeleteConfirm(false)}
       />

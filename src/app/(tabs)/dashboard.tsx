@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
@@ -51,9 +52,19 @@ function greeting(hour: number): string {
 }
 
 export default function DashboardScreen() {
-  const { tasks, courses, scheduledBlocks, health, markMissed, markTaskCompleted, lastAcceptedChange } = useAppState();
+  const {
+    tasks,
+    courses,
+    scheduledBlocks,
+    effectiveAvailability,
+    health,
+    markTaskCompleted,
+    reopenTask,
+    lastAcceptedChange,
+  } = useAppState();
   const { profile } = useContentState();
   const theme = useTheme();
+  const [dismissedNudgeTaskId, setDismissedNudgeTaskId] = useState<string | null>(null);
   const TODAY = getToday();
   const NOW = getNow();
 
@@ -66,22 +77,48 @@ export default function DashboardScreen() {
     .sort((a, b) => a.start.localeCompare(b.start));
 
   const missedTasks = tasks.filter((t) => t.status === 'missed');
-  const needsInputTask = health.suggestedDeferrals[0];
+  // Phase 3G — a task only counts as "scheduled" if it actually has a
+  // ScheduledBlock, never merely because it exists in `tasks` (see the
+  // Phase 3G audit's core distinction). Missed tasks are deliberately
+  // excluded from "unscheduled work" — they already have their own,
+  // more specific banner below, and shouldn't also show up as generic
+  // "still needs scheduling" noise.
+  const scheduledTaskIds = new Set(scheduledBlocks.map((b) => b.taskId));
+  const unscheduledPendingTasks = tasks.filter((t) => t.status === 'pending' && !scheduledTaskIds.has(t.id));
+  // health.suggestedDeferrals can include a missed task (getScheduleHealth's
+  // own "active" set is status !== 'completed', which includes 'missed') —
+  // but a missed task already has its own dedicated recovery banner, so it's
+  // filtered out here rather than also surfacing in the generic nudge below.
+  const needsInputTask = health.suggestedDeferrals.find((t) => t.status !== 'missed');
   const healthMeta = HEALTH_META[health.status];
 
   const plannedMinutes = todaysBlocks.reduce(
     (sum, b) => sum + (new Date(b.end).getTime() - new Date(b.start).getTime()) / 60_000,
     0
   );
+  // What the engine actually considers available today — the real,
+  // horizon-clipped effective availability (see app-state.tsx), not the raw
+  // one-time blocks Settings edits directly. Shown alongside "Planned" so
+  // it's obvious at a glance whether today's plan is using the time that's
+  // really there, or whether there's room left over.
+  const availableMinutesToday = effectiveAvailability
+    .filter((b) => b.start.startsWith(TODAY))
+    .reduce((sum, b) => sum + (new Date(b.end).getTime() - new Date(b.start).getTime()) / 60_000, 0);
   const completedToday = todaysBlocks.filter((b) => taskForBlock(b)?.status === 'completed').length;
   const todayProgressPct = todaysBlocks.length > 0 ? (completedToday / todaysBlocks.length) * 100 : 0;
+  // What's left to actually do today — completed work no longer competes
+  // for today's availability, so the "does this fit" comparison below uses
+  // this instead of the raw planned total: marking a task complete should
+  // visibly move this number, not leave an unchanging warning in place.
+  const remainingMinutesToday = todaysBlocks
+    .filter((b) => taskForBlock(b)?.status !== 'completed')
+    .reduce((sum, b) => sum + (new Date(b.end).getTime() - new Date(b.start).getTime()) / 60_000, 0);
 
   const nextBlock = todaysBlocks.find((b) => new Date(b.end).getTime() > NOW.getTime());
   const nextTask = nextBlock ? taskForBlock(nextBlock) : undefined;
 
   const handleMarkMissed = (taskId: string) => {
-    markMissed(taskId);
-    router.push('/reschedule');
+    router.push(`/recovery/${taskId}`);
   };
 
   return (
@@ -92,11 +129,11 @@ export default function DashboardScreen() {
         right={
           <>
             <Pressable
-              onPress={() => router.push('/settings')}
+              onPress={() => router.push('/notifications')}
               hitSlop={8}
               style={styles.iconButton}
               accessibilityRole="button"
-              accessibilityLabel="Notification settings">
+              accessibilityLabel="Notifications">
               <Ionicons name="notifications-outline" size={22} color={theme.text} />
               {missedTasks.length > 0 && <View style={[styles.badgeDot, { borderColor: theme.background }]} />}
             </Pressable>
@@ -111,40 +148,124 @@ export default function DashboardScreen() {
         }
       />
 
+      {/*
+        Phase 3G fix: "today's workload" and "overall workload outlook" used
+        to be crammed into one card, which is exactly why removing every
+        scheduled block for today could still show "Overloaded" — that
+        badge was never actually about today, it's getScheduleHealth's
+        all-active-tasks-vs-total-availability feasibility read (unchanged,
+        protected file, correct on its own terms). Splitting them into two
+        clearly-labeled cards fixes the semantic mismatch without touching
+        or hiding that underlying calculation.
+      */}
       <Card style={styles.summaryCard}>
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryStat}>
-            <ThemedText type="keyNumber">{formatMinutes(plannedMinutes)}</ThemedText>
-            <ThemedText type="meta" themeColor="textSecondary">
-              Planned
-            </ThemedText>
-          </View>
-          <View style={styles.summaryStat}>
-            <ThemedText type="keyNumber">{todaysBlocks.length}</ThemedText>
-            <ThemedText type="meta" themeColor="textSecondary">
-              Tasks
-            </ThemedText>
-          </View>
-          <View style={styles.summaryStat}>
-            <View style={styles.summaryHealthRow}>
-              <Ionicons name={healthMeta.icon} size={16} color={healthMeta.color} />
-              <ThemedText type="cardTitle" style={{ color: healthMeta.color }}>
-                {healthMeta.label}
+        {todaysBlocks.length === 0 ? (
+          <>
+            <ThemedText themeColor="textSecondary">Nothing scheduled today.</ThemedText>
+            {availableMinutesToday > 0 && (
+              <ThemedText type="small" themeColor="textMuted">
+                You still have {formatMinutes(availableMinutesToday)} of availability today.
               </ThemedText>
+            )}
+          </>
+        ) : (
+          <>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryStat}>
+                <ThemedText type="keyNumber">{formatMinutes(plannedMinutes)}</ThemedText>
+                <ThemedText type="meta" themeColor="textSecondary">
+                  Planned
+                </ThemedText>
+              </View>
+              <View style={styles.summaryStat}>
+                <ThemedText type="keyNumber">{todaysBlocks.length}</ThemedText>
+                <ThemedText type="meta" themeColor="textSecondary">
+                  Tasks
+                </ThemedText>
+              </View>
+              <View style={styles.summaryStat}>
+                <ThemedText type="keyNumber">{formatMinutes(availableMinutesToday)}</ThemedText>
+                <ThemedText type="meta" themeColor="textSecondary">
+                  Available
+                </ThemedText>
+              </View>
             </View>
-            <ThemedText type="meta" themeColor="textSecondary">
-              Schedule health
-            </ThemedText>
-          </View>
-        </View>
-        {todaysBlocks.length > 0 && (
-          <ProgressBar value={todayProgressPct} color={StatusColors.success} style={styles.summaryProgress} />
+            <ProgressBar value={todayProgressPct} color={StatusColors.success} style={styles.summaryProgress} />
+            {/* Honest, real comparison of what's LEFT to do today (not the
+                raw planned total — completing a task should visibly move
+                this, not leave a stale warning in place) against today's
+                real availability. Remaining can legitimately exceed
+                available if a commitment/unavailable period was added after
+                today's plan was already set (nothing auto-repacks on its
+                own — see the master spec's "change as little as necessary"
+                rule); this just surfaces that instead of hiding it. */}
+            {remainingMinutesToday > availableMinutesToday && (
+              <ThemedText type="small" style={styles.overbookedNote}>
+                What&apos;s left today is more than today&apos;s availability — your schedule may need a review.
+              </ThemedText>
+            )}
+          </>
         )}
       </Card>
+
+      {unscheduledPendingTasks.length > 0 && (
+        <Pressable onPress={() => router.push('/task-entry')}>
+          <Card style={styles.unscheduledCard}>
+            <Ionicons name="calendar-clear-outline" size={18} color={theme.textSecondary} />
+            <ThemedText type="meta" themeColor="textSecondary" style={styles.unscheduledText}>
+              {unscheduledPendingTasks.length} task{unscheduledPendingTasks.length > 1 ? 's' : ''} still need
+              {unscheduledPendingTasks.length > 1 ? '' : 's'} scheduling
+            </ThemedText>
+          </Card>
+        </Pressable>
+      )}
+
+      <View style={styles.section}>
+        <SectionHeader title="Workload outlook" />
+        <Card accentColor={healthMeta.color} style={styles.workloadCard}>
+          <View style={styles.summaryHealthRow}>
+            <Ionicons name={healthMeta.icon} size={16} color={healthMeta.color} />
+            <ThemedText type="cardTitle" style={{ color: healthMeta.color }}>
+              {healthMeta.label}
+            </ThemedText>
+          </View>
+          <ThemedText type="meta" themeColor="textSecondary">
+            {health.message}
+          </ThemedText>
+          {/*
+            Phase 3H — getScheduleHealth (protected, unmodified) is
+            intentionally whole-horizon: every active task's required time
+            against total available time, not "today." This card was
+            already separated from Today's stats in Phase 3G; this one
+            static line removes any remaining ambiguity about what it's
+            actually measuring, without touching the underlying calculation.
+          */}
+          <ThemedText type="small" themeColor="textMuted">
+            Reflects your overall workload across all upcoming deadlines — not just today.
+          </ThemedText>
+          {/*
+            The message above can read as contradictory (e.g. "12.9h due
+            but 32h scheduled" while still saying Overloaded) — that's not a
+            bug: the hours-scheduled figure counts ALL your availability
+            over the next couple weeks, but a near-term deadline can only
+            draw on whatever falls before IT specifically. Plenty of total
+            time later doesn't help a task due sooner than that. This line
+            explains the real mechanism rather than leaving the apparent
+            contradiction unexplained.
+          */}
+          {(health.status === 'red' || health.status === 'yellow') && (
+            <ThemedText type="small" themeColor="textMuted">
+              The scheduled-hours figure counts all your upcoming availability, not just before this deadline — extra
+              time later doesn&apos;t help work that&apos;s due sooner.
+            </ThemedText>
+          )}
+        </Card>
+      </View>
 
       {nextTask && nextBlock && (
         <View style={styles.section}>
           <SectionHeader title="Next up" />
+          <Pressable onPress={() => router.push(`/task/${nextTask.id}`)}>
           <Card accentColor={courseAccent(nextTask.courseId)} style={styles.nextUpCard}>
             <View style={styles.nextUpMain}>
               <ThemedText type="meta" themeColor="textSecondary">
@@ -157,15 +278,12 @@ export default function DashboardScreen() {
             </View>
             <StatusBadge label={formatCountdown(NOW.getTime(), nextBlock.start)} color={StatusColors.brand} />
           </Card>
+          </Pressable>
         </View>
       )}
 
       {missedTasks.length > 0 && (
-        <Pressable
-          onPress={() => {
-            markMissed(missedTasks[0].id);
-            router.push('/reschedule');
-          }}>
+        <Pressable onPress={() => router.push(`/recovery/${missedTasks[0].id}`)}>
           <Card style={styles.missedCard}>
             <Ionicons name="alert-circle-outline" size={20} color={StatusColors.danger} />
             <View style={styles.missedTextGroup}>
@@ -197,6 +315,7 @@ export default function DashboardScreen() {
               title={task.title}
               courseName={courseName(task.courseId)}
               accentColor={courseAccent(task.courseId)}
+              onPress={() => router.push(`/task/${task.id}`)}
               trailing={
                 isActive ? (
                   <View style={styles.taskActions}>
@@ -215,11 +334,18 @@ export default function DashboardScreen() {
                       style={styles.actionButton}
                     />
                   </View>
+                ) : task.status === 'completed' ? (
+                  <View style={styles.taskActions}>
+                    <StatusBadge label="Completed" color={StatusColors.success} />
+                    <Button
+                      label="Reopen"
+                      variant="outlined"
+                      onPress={() => reopenTask(task.id)}
+                      style={styles.actionButton}
+                    />
+                  </View>
                 ) : (
-                  <StatusBadge
-                    label={task.status === 'completed' ? 'Completed' : 'Missed'}
-                    color={task.status === 'completed' ? StatusColors.success : StatusColors.danger}
-                  />
+                  <StatusBadge label="Missed" color={StatusColors.danger} />
                 )
               }
             />
@@ -240,24 +366,58 @@ export default function DashboardScreen() {
         </Pressable>
       )}
 
-      {needsInputTask && (
-        <Card accentColor={StatusColors.brand} style={styles.nudgeCard}>
-          <View style={styles.nudgeHeader}>
-            <Ionicons name="sparkles-outline" size={20} color={StatusColors.brand} />
-            <ThemedText type="cardTitle">Needs your input</ThemedText>
-          </View>
-          <ThemedText type="meta" themeColor="textSecondary">
-            {needsInputTask.title} is your lowest-priority item this week — it still fits, but review it
-            if your plans change.
-          </ThemedText>
-          <Button
-            label="Review in Calendar"
-            variant="outlined"
-            onPress={() => router.push('/(tabs)/calendar')}
-            style={styles.nudgeButton}
-          />
-        </Card>
-      )}
+      {needsInputTask && needsInputTask.id !== dismissedNudgeTaskId && (() => {
+        // Phase 3G fix: this card must never claim a task "still fits" or
+        // send the student to Calendar unless it's actually scheduled —
+        // health.suggestedDeferrals is the lowest-priority ACTIVE task,
+        // scheduled or not (see the Phase 3G audit).
+        //
+        // Follow-up fix: the scheduled branch used to send the student to
+        // the generic Calendar tab, which opens on TODAY — if this task
+        // isn't scheduled today, there's nothing there to find, a dead end.
+        // Task Detail (built this phase) always shows exactly when this
+        // task is scheduled, real actions included, regardless of which
+        // day that is — so both branches go there now.
+        //
+        // Dismiss: this card is a standing "if you need to cut something,
+        // this is the first candidate" indicator, not a one-time todo — a
+        // task can legitimately keep being the genuine lowest-priority item
+        // (a short reading task nearly always will be) even right after
+        // you've already reviewed or rescheduled it, which read as "nagging
+        // about the same thing" rather than new information. Dismiss
+        // acknowledges THIS specific nomination for the rest of the
+        // session; it comes back the moment a DIFFERENT task becomes the
+        // lowest-priority one, so it never hides genuinely new information.
+        const isScheduled = scheduledTaskIds.has(needsInputTask.id);
+        return (
+          <Card accentColor={StatusColors.brand} style={styles.nudgeCard}>
+            <View style={styles.nudgeHeader}>
+              <Ionicons name="sparkles-outline" size={20} color={StatusColors.brand} />
+              <ThemedText type="cardTitle">Needs your input</ThemedText>
+            </View>
+            <ThemedText type="meta" themeColor="textSecondary">
+              {needsInputTask.title} is your lowest-priority item right now.{' '}
+              {isScheduled
+                ? "It still fits on your schedule, but review it if your plans change."
+                : "It isn't scheduled yet — review it when you're ready."}
+            </ThemedText>
+            <View style={styles.nudgeActions}>
+              <Button
+                label="Review task"
+                variant="outlined"
+                onPress={() => router.push(`/task/${needsInputTask.id}`)}
+                style={styles.nudgeButton}
+              />
+              <Button
+                label="Dismiss"
+                variant="outlined"
+                onPress={() => setDismissedNudgeTaskId(needsInputTask.id)}
+                style={styles.nudgeButton}
+              />
+            </View>
+          </Card>
+        );
+      })()}
 
       <Button
         label="+ Add task"
@@ -305,6 +465,20 @@ const styles = StyleSheet.create({
   summaryProgress: {
     marginTop: 2,
   },
+  overbookedNote: {
+    color: StatusColors.warning,
+  },
+  unscheduledCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  unscheduledText: {
+    flex: 1,
+  },
+  workloadCard: {
+    gap: Spacing.one,
+  },
   section: {
     gap: Spacing.two,
   },
@@ -347,6 +521,10 @@ const styles = StyleSheet.create({
   nudgeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.two,
+  },
+  nudgeActions: {
+    flexDirection: 'row',
     gap: Spacing.two,
   },
   nudgeButton: {

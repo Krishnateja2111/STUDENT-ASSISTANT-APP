@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
@@ -9,10 +9,12 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { ListRow } from '@/components/list-row';
 import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing, StatusColors } from '@/constants/theme';
+import { MinTouchTarget, Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAppState } from '@/state/app-state';
-import { useContentState } from '@/state/content-state';
+import { type AcademicYear, useContentState } from '@/state/content-state';
+
+const ACADEMIC_YEARS: AcademicYear[] = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate'];
 
 export default function ProfileScreen() {
   const { courses, tasks, logout } = useAppState();
@@ -22,27 +24,55 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
+  const [school, setSchool] = useState(profile.school ?? '');
+  const [major, setMajor] = useState(profile.major ?? '');
+  const [academicYear, setAcademicYear] = useState<AcademicYear | undefined>(profile.academicYear);
+  const [bio, setBio] = useState(profile.bio ?? '');
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [showDiscardProfileEdit, setShowDiscardProfileEdit] = useState(false);
 
+  const hasProfileChanges =
+    name !== profile.name ||
+    email !== profile.email ||
+    school !== (profile.school ?? '') ||
+    major !== (profile.major ?? '') ||
+    academicYear !== profile.academicYear ||
+    bio !== (profile.bio ?? '');
+
   const totalTasks = tasks.length;
-  const activeTasks = tasks.filter((t) => t.status === 'pending' || t.status === 'scheduled').length;
+  // Phase 4 fix: 'scheduled' is never actually assigned anywhere in this
+  // codebase (schedule placement is tracked separately via scheduledBlocks,
+  // not via Task.status), and a missed task is still outstanding work, not
+  // "not active" — this now matches the same definition Courses' "remaining"
+  // and the scheduling engine's own "active" set already use.
+  const activeTasks = tasks.filter((t) => t.status !== 'completed').length;
   const completedTasks = tasks.filter((t) => t.status === 'completed').length;
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   const startEditing = () => {
     setName(profile.name);
     setEmail(profile.email);
+    setSchool(profile.school ?? '');
+    setMajor(profile.major ?? '');
+    setAcademicYear(profile.academicYear);
+    setBio(profile.bio ?? '');
     setEditing(true);
   };
 
   const handleSaveProfile = () => {
-    updateProfile({ name: name.trim() || 'Student', email: email.trim() });
+    updateProfile({
+      name: name.trim() || 'Student',
+      email: email.trim(),
+      school: school.trim(),
+      major: major.trim(),
+      academicYear,
+      bio: bio.trim(),
+    });
     setEditing(false);
   };
 
   const handleCancelEdit = () => {
-    if (name !== profile.name || email !== profile.email) {
+    if (hasProfileChanges) {
       setShowDiscardProfileEdit(true);
     } else {
       setEditing(false);
@@ -84,6 +114,64 @@ export default function ProfileScreen() {
               value={email}
               onChangeText={setEmail}
             />
+            <TextInput
+              style={[
+                styles.input,
+                { color: theme.text, borderColor: theme.border, backgroundColor: theme.background },
+              ]}
+              placeholder="School"
+              placeholderTextColor={theme.textMuted}
+              value={school}
+              onChangeText={setSchool}
+            />
+            <TextInput
+              style={[
+                styles.input,
+                { color: theme.text, borderColor: theme.border, backgroundColor: theme.background },
+              ]}
+              placeholder="Major / field of study"
+              placeholderTextColor={theme.textMuted}
+              value={major}
+              onChangeText={setMajor}
+            />
+
+            <ThemedText type="meta" themeColor="textMuted" style={styles.fieldLabel}>
+              YEAR
+            </ThemedText>
+            <View style={styles.chipRow}>
+              {ACADEMIC_YEARS.map((year) => {
+                const selected = academicYear === year;
+                return (
+                  <Pressable key={year} onPress={() => setAcademicYear(selected ? undefined : year)}>
+                    <View
+                      style={[
+                        styles.chip,
+                        selected
+                          ? { backgroundColor: StatusColors.brand }
+                          : { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border },
+                      ]}>
+                      <ThemedText type="small" style={selected ? styles.chipTextSelected : undefined}>
+                        {year}
+                      </ThemedText>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <TextInput
+              style={[
+                styles.input,
+                styles.bioInput,
+                { color: theme.text, borderColor: theme.border, backgroundColor: theme.background },
+              ]}
+              placeholder="A short bio (optional)"
+              placeholderTextColor={theme.textMuted}
+              value={bio}
+              onChangeText={setBio}
+              multiline
+            />
+
             <View style={styles.editActions}>
               <Button label="Save" onPress={handleSaveProfile} style={styles.flexButton} />
               <Button label="Cancel" variant="outlined" onPress={handleCancelEdit} style={styles.flexButton} />
@@ -95,11 +183,21 @@ export default function ProfileScreen() {
             <View style={styles.identityText}>
               <ThemedText type="cardTitle">{profile.name}</ThemedText>
               <ThemedText type="meta" themeColor="textSecondary">
-                Student
+                {[profile.academicYear, profile.major].filter(Boolean).join(' · ') || 'Student'}
               </ThemedText>
+              {profile.school ? (
+                <ThemedText type="meta" themeColor="textSecondary">
+                  {profile.school}
+                </ThemedText>
+              ) : null}
               <ThemedText type="meta" themeColor="textSecondary">
                 {profile.email || 'No email set'}
               </ThemedText>
+              {profile.bio ? (
+                <ThemedText type="meta" themeColor="textMuted" style={styles.bioText}>
+                  {profile.bio}
+                </ThemedText>
+              ) : null}
             </View>
             <Button label="Edit" variant="outlined" onPress={startEditing} style={styles.editButton} />
           </View>
@@ -131,7 +229,18 @@ export default function ProfileScreen() {
       </View>
 
       <Card style={styles.settingsCard}>
-        <ListRow icon="person-outline" label="Personal information" description="Name and email" onPress={startEditing} />
+        <ListRow
+          icon="person-outline"
+          label="Personal information"
+          description="Name, email, school, major, year, bio"
+          onPress={startEditing}
+        />
+        <ListRow
+          icon="bar-chart-outline"
+          label="Weekly progress"
+          description="Planned vs. completed, by week"
+          onPress={() => router.push('/weekly-progress')}
+        />
         <ListRow icon="notifications-outline" label="Notifications" description="Reminders and summaries" onPress={() => router.push('/settings')} />
         <ListRow icon="time-outline" label="Study availability" description="When you can be scheduled" onPress={() => router.push('/settings')} />
       </Card>
@@ -202,6 +311,33 @@ const styles = StyleSheet.create({
   },
   flexButton: {
     flex: 1,
+  },
+  fieldLabel: {
+    letterSpacing: 0.6,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  chip: {
+    minHeight: MinTouchTarget - 4,
+    justifyContent: 'center',
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.pill,
+  },
+  chipTextSelected: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  bioInput: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+    paddingTop: Spacing.two + 2,
+  },
+  bioText: {
+    marginTop: 2,
   },
   sectionLabel: {
     letterSpacing: 0.6,

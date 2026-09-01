@@ -58,6 +58,10 @@ export default function RootLayout() {
                 options={{ presentation: 'modal', headerShown: true, title: 'Schedule Update' }}
               />
               <Stack.Screen
+                name="recovery/[id]"
+                options={{ presentation: 'modal', headerShown: true, title: 'What Happened?' }}
+              />
+              <Stack.Screen
                 name="course-entry"
                 options={{ presentation: 'modal', headerShown: true, title: 'Course' }}
               />
@@ -65,8 +69,14 @@ export default function RootLayout() {
                 name="settings"
                 options={{ presentation: 'modal', headerShown: true, title: 'Settings' }}
               />
+              <Stack.Screen
+                name="notifications"
+                options={{ presentation: 'modal', headerShown: true, title: 'Notifications' }}
+              />
               <Stack.Screen name="course/[id]" options={{ headerShown: true, title: 'Course' }} />
+              <Stack.Screen name="task/[id]" options={{ headerShown: true, title: 'Task' }} />
               <Stack.Screen name="document/[id]" options={{ headerShown: true, title: 'Document' }} />
+              <Stack.Screen name="weekly-progress" options={{ headerShown: true, title: 'Weekly Progress' }} />
             </Stack>
           </ContentStateProvider>
         </AppStateProvider>

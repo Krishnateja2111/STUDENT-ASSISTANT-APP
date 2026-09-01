@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { DateTimePicker } from '@/components/datetime-picker';
 import { ThemedText } from '@/components/themed-text';
 import { MinTouchTarget, Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -22,7 +23,14 @@ const TASK_TYPES: { value: TaskType; label: string }[] = [
 const MAX_DURATION_MINUTES = 480; // 8h — a sensible upper bound for a single task session
 
 function isValidDeadline(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value.trim())) return false;
+  // Seconds are optional: every dueDate already persisted by this app (seed
+  // tasks, anything the scheduling engine's own isoFromMs helpers produce)
+  // includes them, so requiring an exact no-seconds match here silently
+  // blocked Save on ANY untouched existing task's deadline — a real,
+  // reproduced bug (see this phase's picker-wiring verification), not a
+  // hypothetical. DateTimePicker itself never emits seconds, so this stays
+  // just as strict for anything the picker actually produces.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(value.trim())) return false;
   return !Number.isNaN(new Date(value.trim()).getTime());
 }
 
@@ -69,6 +77,15 @@ export default function TaskEntryScreen() {
   const showDeadlineError = attemptedSave && !deadlineValid;
   const showDurationError = attemptedSave && !durationValid;
 
+  // Bug fix: router.back() is a silent no-op with no in-app navigation
+  // history to go back to (a direct URL load, a page refresh while already
+  // on this screen — reproduced live on Weekly Progress/Notifications, see
+  // those files) — Dashboard is always a safe, real destination.
+  const safeBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/dashboard');
+  };
+
   const handleSave = () => {
     setAttemptedSave(true);
     if (!canSave) return;
@@ -79,13 +96,17 @@ export default function TaskEntryScreen() {
       dueDate: dueDate.trim(),
       estimatedMinutes: Number(estimatedMinutes),
     };
-    if (existing) {
-      updateTask(existing.id, payload);
-    } else {
-      addTask(payload);
-    }
+    // addTask/updateTask attempt to place the task and return true when
+    // that produced a meaningful schedule change worth reviewing (Phase
+    // 3C) — in that case go straight to the same review screen the
+    // missed-task flow already uses, instead of just going back.
+    const reviewNeeded = existing ? updateTask(existing.id, payload) : addTask(payload);
     leaveWithoutPrompt();
-    router.back();
+    if (reviewNeeded) {
+      router.replace('/reschedule');
+    } else {
+      safeBack();
+    }
   };
 
   const handleDelete = () => {
@@ -93,7 +114,7 @@ export default function TaskEntryScreen() {
     removeTask(existing.id);
     leaveWithoutPrompt();
     setShowDeleteConfirm(false);
-    router.back();
+    safeBack();
   };
 
   return (
@@ -102,7 +123,7 @@ export default function TaskEntryScreen() {
         options={{
           title: existing ? 'Edit Task' : 'New Task',
           headerLeft: () => (
-            <Pressable onPress={() => router.back()} hitSlop={8} style={styles.headerAction}>
+            <Pressable onPress={safeBack} hitSlop={8} style={styles.headerAction}>
               <ThemedText type="default" themeColor="textSecondary">
                 Cancel
               </ThemedText>
@@ -188,22 +209,10 @@ export default function TaskEntryScreen() {
       <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
         DEADLINE
       </ThemedText>
-      {/* TODO(ui): swap for a real date/time picker; kept as text input to
-          avoid pulling in a native-only picker dependency during this
-          UI-validation pass. */}
-      <TextInput
-        style={[
-          styles.input,
-          { color: theme.text, borderColor: showDeadlineError ? StatusColors.danger : theme.border, backgroundColor: theme.backgroundElement },
-        ]}
-        placeholder="YYYY-MM-DDTHH:mm"
-        placeholderTextColor={theme.textMuted}
-        value={dueDate}
-        onChangeText={setDueDate}
-      />
+      <DateTimePicker value={dueDate} onChange={setDueDate} />
       {showDeadlineError && (
         <ThemedText type="small" style={styles.errorText}>
-          Enter a valid date and time, e.g. 2026-08-25T14:00
+          Choose a due date and time.
         </ThemedText>
       )}
 

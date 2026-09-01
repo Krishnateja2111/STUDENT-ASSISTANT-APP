@@ -29,6 +29,14 @@ export default function CourseEntryScreen() {
 
   const canSave = name.trim().length > 0;
 
+  // Bug fix: router.back() is a silent no-op with no in-app navigation
+  // history to go back to (a direct URL load, a page refresh while already
+  // on this screen — reproduced live on Weekly Progress/Notifications).
+  const safeBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/courses');
+  };
+
   const handleSave = () => {
     if (!canSave) return;
     if (existing) {
@@ -37,7 +45,7 @@ export default function CourseEntryScreen() {
       addCourse({ name: name.trim(), colorTag });
     }
     leaveWithoutPrompt();
-    router.back();
+    safeBack();
   };
 
   return (
@@ -45,7 +53,7 @@ export default function CourseEntryScreen() {
       <Stack.Screen
         options={{
           headerLeft: () => (
-            <Pressable onPress={() => router.back()} hitSlop={8} style={styles.headerAction}>
+            <Pressable onPress={safeBack} hitSlop={8} style={styles.headerAction}>
               <ThemedText type="default" themeColor="textSecondary">
                 Cancel
               </ThemedText>

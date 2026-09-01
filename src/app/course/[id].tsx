@@ -32,7 +32,7 @@ function formatDate(iso: string) {
 
 export default function CourseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { courses, tasks, removeCourse } = useAppState();
+  const { courses, tasks, removeCourse, reopenTask } = useAppState();
   const { documents, addDocument, removeDocumentsByCourse } = useContentState();
   const theme = useTheme();
   const [tab, setTab] = useState<TabKey>('overview');
@@ -67,7 +67,13 @@ export default function CourseDetailScreen() {
     removeCourse(id);
     removeDocumentsByCourse(id);
     setShowDeleteConfirm(false);
-    router.back();
+    // Bug fix: router.back() is a silent no-op with no in-app navigation
+    // history (a direct URL load, a page refresh while already here) — and
+    // even when it does have history, the course this screen was showing
+    // no longer exists, so "back" isn't really meaningful here either way;
+    // the course list is always the right destination after a delete.
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/courses');
   };
 
   if (!course) {
@@ -156,6 +162,15 @@ export default function CourseDetailScreen() {
                   <ThemedText type="meta" themeColor="textMuted">
                     {formatDate(task.dueDate)}
                   </ThemedText>
+                  <Pressable
+                    onPress={() => reopenTask(task.id)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Reopen ${task.title}`}>
+                    <ThemedText type="small" style={{ color: StatusColors.brand }}>
+                      Reopen
+                    </ThemedText>
+                  </Pressable>
                 </View>
               ))}
             </>
@@ -167,7 +182,7 @@ export default function CourseDetailScreen() {
         <View style={styles.section}>
           {courseTasks.length === 0 && <EmptyState icon="checkmark-done-outline" message="No tasks for this course yet." />}
           {courseTasks.map((task) => (
-            <Pressable key={task.id} onPress={() => router.push(`/task-entry?id=${task.id}`)}>
+            <Pressable key={task.id} onPress={() => router.push(`/task/${task.id}`)}>
               <Card accentColor={accent} style={styles.taskCard}>
                 <View style={styles.taskRow}>
                   <ThemedText type="cardTitle" style={styles.taskRowTitle}>

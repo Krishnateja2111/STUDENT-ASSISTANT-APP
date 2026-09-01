@@ -21,7 +21,13 @@ function formatDate(iso: string) {
 }
 
 export default function CoursesScreen() {
-  const { courses, tasks } = useAppState();
+  const { courses, tasks, scheduledBlocks } = useAppState();
+  // Phase 3G — a task counts as scheduled only if it actually has a
+  // ScheduledBlock, never merely because it exists (see the Phase 3G
+  // audit). Course progress stays task-completion-based and fully
+  // independent of scheduling — a course with 5 unscheduled tasks and 0
+  // completed is legitimately "0%", not a broken/empty state.
+  const scheduledTaskIds = new Set(scheduledBlocks.map((b) => b.taskId));
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -30,6 +36,8 @@ export default function CoursesScreen() {
       {courses.map((course) => {
         const courseTasks = tasks.filter((t) => t.courseId === course.id);
         const completedTasks = courseTasks.filter((t) => t.status === 'completed');
+        const remainingCount = courseTasks.length - completedTasks.length;
+        const scheduledCount = courseTasks.filter((t) => scheduledTaskIds.has(t.id)).length;
         const progressPct = courseTasks.length > 0 ? (completedTasks.length / courseTasks.length) * 100 : 0;
         const upcoming = courseTasks
           .filter((t) => t.status !== 'completed')
@@ -51,6 +59,12 @@ export default function CoursesScreen() {
                     {courseTasks.length} task{courseTasks.length === 1 ? '' : 's'}
                     {upcoming ? ` · Next: ${formatDate(upcoming.dueDate)}` : ''}
                   </ThemedText>
+                  {courseTasks.length > 0 && (
+                    <ThemedText type="meta" themeColor="textMuted">
+                      {completedTasks.length} completed · {remainingCount} remaining
+                      {scheduledCount > 0 ? ` · ${scheduledCount} scheduled` : ''}
+                    </ThemedText>
+                  )}
                 </View>
                 <ThemedText type="smallBold" themeColor="textSecondary">
                   {Math.round(progressPct)}%

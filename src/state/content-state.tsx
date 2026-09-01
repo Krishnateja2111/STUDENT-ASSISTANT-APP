@@ -29,9 +29,16 @@ export interface StudentDocument {
   uri: string;
 }
 
+export type AcademicYear = 'Freshman' | 'Sophomore' | 'Junior' | 'Senior' | 'Graduate';
+
 export interface StudentProfile {
   name: string;
   email: string;
+  /** Every field below is optional real user-entered identity info — never pre-filled with invented data. */
+  school?: string;
+  major?: string;
+  academicYear?: AcademicYear;
+  bio?: string;
 }
 
 export interface NotificationPrefs {
@@ -81,7 +88,14 @@ export async function loadPersistedContentState(): Promise<PersistedContentState
 
 const ContentStateContext = createContext<ContentState | null>(null);
 
-const DEFAULT_PROFILE: StudentProfile = { name: 'Student', email: '' };
+const DEFAULT_PROFILE: StudentProfile = {
+  name: 'Krishna',
+  email: '',
+  school: 'State University',
+  major: 'Computer Science',
+  academicYear: 'Junior',
+  bio: '',
+};
 const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = { deadlineReminders: true, dailyPlanSummary: false };
 
 export function ContentStateProvider({

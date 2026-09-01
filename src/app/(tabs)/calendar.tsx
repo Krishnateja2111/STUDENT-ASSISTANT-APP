@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -136,13 +137,21 @@ export default function CalendarScreen() {
               accentColor={getCourseAccent(task.courseId, courses)}
               onPress={() => setExpandedBlockId(expanded ? null : block.id)}>
               {expanded && (
-                <Button
-                  label="Remove from schedule"
-                  variant="outlined"
-                  color={StatusColors.danger}
-                  onPress={() => setPendingRemoveBlockId(block.id)}
-                  style={styles.removeButton}
-                />
+                <View style={styles.expandedActions}>
+                  <Button
+                    label="View details"
+                    variant="outlined"
+                    onPress={() => router.push(`/task/${task.id}`)}
+                    style={styles.expandedButton}
+                  />
+                  <Button
+                    label="Remove from schedule"
+                    variant="outlined"
+                    color={StatusColors.danger}
+                    onPress={() => setPendingRemoveBlockId(block.id)}
+                    style={styles.expandedButton}
+                  />
+                </View>
               )}
             </ScheduledTaskCard>
           );
@@ -204,8 +213,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     marginLeft: Spacing.one,
   },
-  removeButton: {
-    alignSelf: 'flex-start',
+  expandedActions: {
+    flexDirection: 'row',
+    gap: Spacing.two,
     marginTop: Spacing.one,
+  },
+  expandedButton: {
+    flex: 1,
   },
 });
