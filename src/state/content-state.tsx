@@ -46,6 +46,9 @@ export interface NotificationPrefs {
   dailyPlanSummary: boolean;
 }
 
+/** 'system' follows the device's own light/dark setting (the previous, only behavior); 'light'/'dark' pins it regardless of the device. */
+export type ThemePreference = 'system' | 'light' | 'dark';
+
 interface ContentState {
   documents: StudentDocument[];
   addDocument: (doc: Omit<StudentDocument, 'id'>) => void;
@@ -59,18 +62,26 @@ interface ContentState {
   /** TODO(notifications): UI-only — no real push notification wiring yet. */
   notificationPrefs: NotificationPrefs;
   updateNotificationPrefs: (updates: Partial<NotificationPrefs>) => void;
+
+  themePreference: ThemePreference;
+  setThemePreference: (pref: ThemePreference) => void;
 }
 
-/** The subset of ContentState that's durable — this Context holds nothing transient beyond these three. */
+/** The subset of ContentState that's durable — this Context holds nothing transient beyond these four. */
 export interface PersistedContentState {
   documents: StudentDocument[];
   profile: StudentProfile;
   notificationPrefs: NotificationPrefs;
+  /** Optional for backward compatibility with data persisted before this field existed — see isValidPersistedContentState. */
+  themePreference?: ThemePreference;
 }
 
 function isValidPersistedContentState(value: unknown): value is PersistedContentState {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
+  // themePreference deliberately NOT required — see availabilityRules'
+  // identical reasoning in app-state.tsx: data persisted before this field
+  // existed shouldn't be treated as invalid and silently discarded.
   return (
     Array.isArray(v.documents) &&
     !!v.profile &&
@@ -111,6 +122,7 @@ export function ContentStateProvider({
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs>(
     initialData?.notificationPrefs ?? DEFAULT_NOTIFICATION_PREFS
   );
+  const [themePreference, setThemePreference] = useState<ThemePreference>(initialData?.themePreference ?? 'system');
 
   const skipNextPersist = useRef(true);
   useEffect(() => {
@@ -118,8 +130,13 @@ export function ContentStateProvider({
       skipNextPersist.current = false;
       return;
     }
-    writePersisted<PersistedContentState>(CONTENT_STATE_STORAGE_KEY, { documents, profile, notificationPrefs });
-  }, [documents, profile, notificationPrefs]);
+    writePersisted<PersistedContentState>(CONTENT_STATE_STORAGE_KEY, {
+      documents,
+      profile,
+      notificationPrefs,
+      themePreference,
+    });
+  }, [documents, profile, notificationPrefs, themePreference]);
 
   const value = useMemo<ContentState>(
     () => ({
@@ -134,8 +151,11 @@ export function ContentStateProvider({
 
       notificationPrefs,
       updateNotificationPrefs: (updates) => setNotificationPrefs((prev) => ({ ...prev, ...updates })),
+
+      themePreference,
+      setThemePreference,
     }),
-    [documents, profile, notificationPrefs]
+    [documents, profile, notificationPrefs, themePreference]
   );
 
   return <ContentStateContext.Provider value={value}>{children}</ContentStateContext.Provider>;

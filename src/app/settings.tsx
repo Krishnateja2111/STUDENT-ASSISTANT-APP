@@ -189,7 +189,7 @@ export default function SettingsScreen() {
     removeUnavailablePeriod,
     logout,
   } = useAppState();
-  const { profile } = useContentState();
+  const { profile, themePreference, setThemePreference } = useContentState();
   const theme = useTheme();
   const colorScheme = useColorScheme();
   const [pendingRemove, setPendingRemove] = useState<PendingRemove | null>(null);
@@ -548,14 +548,33 @@ export default function SettingsScreen() {
       <View style={styles.section}>
         <SectionHeader title="Appearance" />
         <Card style={styles.infoCard}>
-          <View style={styles.notificationRow}>
-            <View style={styles.notificationText}>
-              <ThemedText type="cardTitle">Theme</ThemedText>
-              <ThemedText type="meta" themeColor="textSecondary">
-                Automatically follows your device&apos;s system setting
-              </ThemedText>
-            </View>
-            <StatusBadge label={appearanceLabel} />
+          <View style={styles.notificationText}>
+            <ThemedText type="cardTitle">Theme</ThemedText>
+            <ThemedText type="meta" themeColor="textSecondary">
+              {themePreference === 'system'
+                ? `Following your device's system setting (currently ${appearanceLabel})`
+                : `Pinned to ${appearanceLabel}, regardless of your device's setting`}
+            </ThemedText>
+          </View>
+          <View style={styles.kindToggleRow}>
+            {(['system', 'light', 'dark'] as const).map((pref) => {
+              const selected = themePreference === pref;
+              return (
+                <Pressable
+                  key={pref}
+                  onPress={() => setThemePreference(pref)}
+                  style={[
+                    styles.kindChip,
+                    selected
+                      ? { backgroundColor: StatusColors.brand }
+                      : { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border },
+                  ]}>
+                  <ThemedText type="small" style={selected ? styles.chipTextSelected : undefined}>
+                    {pref === 'system' ? 'System' : pref === 'light' ? 'Light' : 'Dark'}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
           </View>
         </Card>
       </View>
