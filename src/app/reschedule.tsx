@@ -162,10 +162,26 @@ export default function RescheduleScreen() {
                   color={accepted ? StatusColors.success : StatusColors.brand}
                   onPress={() => setAcceptedIds((prev) => new Set(prev).add(entry.taskId))}
                 />
+                {/*
+                  Bug fix (reschedule.tsx is treated-as-protected — this is
+                  the bug-justified exception, see the master spec's file
+                  list): this sent the student to the generic Calendar tab,
+                  which opens on TODAY with no reference to which task or
+                  day they came here about — the exact same dead-end class
+                  already fixed on Dashboard this phase. There's no manual
+                  "pick your own slot" placement mechanism in this app (the
+                  deterministic engine is the sole scheduling authority —
+                  see the master spec) — the one real lever a student has is
+                  adjusting the task's own duration/deadline, which is what
+                  Task Detail's Edit action actually offers. Routing there
+                  instead gives a concrete, actionable screen for THIS task,
+                  not a blank calendar day. Renamed to match the "Review
+                  task" language already used everywhere else this phase.
+                */}
                 <Button
-                  label="Choose Another Time"
+                  label="Review Task"
                   variant="outlined"
-                  onPress={() => router.push('/(tabs)/calendar')}
+                  onPress={() => router.push(`/task/${entry.taskId}`)}
                 />
               </View>
             </Card>
