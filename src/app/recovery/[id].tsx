@@ -56,14 +56,20 @@ export default function RecoveryImpactScreen() {
     else router.replace('/(tabs)/dashboard');
   };
 
-  if (!task || !block) {
+  // Bug fix: a missed task that a previous recovery attempt genuinely
+  // couldn't fit anywhere (see acceptReschedule in app-state.tsx — it
+  // correctly stays 'missed' with no block rather than fabricating a
+  // placement) used to hit the exact same "nothing to recover" dead end as
+  // a task that's ACTUALLY been resolved or deleted — even though it's
+  // still sitting right there in the missed count on Dashboard/Weekly
+  // Progress. Only a task that doesn't exist at all gets that message now;
+  // a real, still-missed task always gets a real way to try again below,
+  // regardless of whether it currently has a block.
+  if (!task) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
         <Stack.Screen options={{ title: 'Recovery' }} />
-        <EmptyState
-          icon="alert-circle-outline"
-          message="This task doesn't have anything to recover — it may have already been rescheduled or removed."
-        />
+        <EmptyState icon="alert-circle-outline" message="This task couldn't be found — it may have been deleted." />
         <Button label="Back" variant="outlined" onPress={safeBack} />
       </ScrollView>
     );
@@ -107,12 +113,21 @@ export default function RecoveryImpactScreen() {
         <ThemedText type="meta" themeColor="textSecondary">
           {courseName}
         </ThemedText>
-        <View style={styles.scheduledRow}>
-          <Ionicons name="time-outline" size={16} color={theme.textSecondary} />
-          <ThemedText type="meta" themeColor="textSecondary">
-            Was scheduled for {formatBlockTime(block.start, block.end)}
-          </ThemedText>
-        </View>
+        {block ? (
+          <View style={styles.scheduledRow}>
+            <Ionicons name="time-outline" size={16} color={theme.textSecondary} />
+            <ThemedText type="meta" themeColor="textSecondary">
+              Was scheduled for {formatBlockTime(block.start, block.end)}
+            </ThemedText>
+          </View>
+        ) : (
+          <View style={styles.scheduledRow}>
+            <Ionicons name="alert-circle-outline" size={16} color={StatusColors.danger} />
+            <ThemedText type="meta" themeColor="textSecondary">
+              Not currently scheduled — an earlier attempt to fit this in couldn&apos;t find room.
+            </ThemedText>
+          </View>
+        )}
       </Card>
 
       <ThemedText type="meta" themeColor="textMuted" style={styles.eyebrow}>
@@ -168,7 +183,7 @@ export default function RecoveryImpactScreen() {
         ))}
       </Card>
 
-      <Button label="Analyze Impact" onPress={handleAnalyze} style={styles.analyzeButton} />
+      <Button label={block ? 'Analyze Impact' : 'Try Again'} onPress={handleAnalyze} style={styles.analyzeButton} />
     </ScrollView>
   );
 }
