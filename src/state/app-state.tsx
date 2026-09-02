@@ -191,6 +191,19 @@ interface AppState {
 
   health: ScheduleHealth;
 
+  /**
+   * A correctly-scoped companion to health.message — see the bug-fix
+   * comment on its computation. null when there's no active task with a
+   * real (non-past) deadline to anchor on.
+   */
+  nearTermWorkload: {
+    nearestDeadline: string;
+    neededMinutesNearTerm: number;
+    availableMinutesNearTerm: number;
+    neededMinutesTotal: number;
+    availableMinutesTotal: number;
+  } | null;
+
   pendingReschedule: RescheduleResult | null;
   pendingExplanations: ExplanationEntry[];
   markMissed: (taskId: string) => void;
@@ -334,6 +347,46 @@ export function AppStateProvider({
     () => getScheduleHealth(healthRelevantTasks, effectiveAvailability),
     [healthRelevantTasks, effectiveAvailability]
   );
+
+  // Bug fix: getScheduleHealth's own message text says "You have Xh of
+  // work due before {nearest deadline} but only Yh scheduled" — but X is
+  // actually the sum of EVERY active task's time, not just the ones
+  // genuinely due by that nearest deadline (most are due days later).
+  // Reproduced live: message claimed "9h due before Wednesday" when only
+  // one 45-minute task was actually due by then — the rest were real work,
+  // just due later, misattributed to "before Wednesday" by the sentence's
+  // own construction. getScheduleHealth is fully protected (its STATUS —
+  // red/yellow/green — comes from a real, more rigorous whole-horizon
+  // placement simulation and stays authoritative, untouched here), but
+  // nothing requires trusting its pre-built message string for a claim
+  // this specific. This is a genuinely correctly-scoped equivalent,
+  // computed from the same real tasks/effectiveAvailability data (the
+  // same category of real-data aggregation as remainingMinutesToday
+  // above — filtering and summing, not a scheduling decision) — Dashboard
+  // uses it instead of the protected message's "before X" sentence.
+  const nearTermWorkload = useMemo(() => {
+    if (healthRelevantTasks.length === 0) return null;
+    const nearestDeadlineMs = Math.min(...healthRelevantTasks.map((t) => new Date(t.dueDate).getTime()));
+    const dueByNearest = healthRelevantTasks.filter((t) => new Date(t.dueDate).getTime() <= nearestDeadlineMs);
+    const neededMinutesNearTerm = dueByNearest.reduce((sum, t) => sum + t.estimatedMinutes, 0);
+    const availableMinutesNearTerm = effectiveAvailability.reduce((sum, b) => {
+      const start = new Date(b.start).getTime();
+      const end = Math.min(new Date(b.end).getTime(), nearestDeadlineMs);
+      return sum + Math.max(0, (end - start) / 60_000);
+    }, 0);
+    const neededMinutesTotal = healthRelevantTasks.reduce((sum, t) => sum + t.estimatedMinutes, 0);
+    const availableMinutesTotal = effectiveAvailability.reduce(
+      (sum, b) => sum + (new Date(b.end).getTime() - new Date(b.start).getTime()) / 60_000,
+      0
+    );
+    return {
+      nearestDeadline: new Date(nearestDeadlineMs).toISOString(),
+      neededMinutesNearTerm,
+      availableMinutesNearTerm,
+      neededMinutesTotal,
+      availableMinutesTotal,
+    };
+  }, [healthRelevantTasks, effectiveAvailability]);
 
   /**
    * Phase 3C — general single-task re-planning orchestration. Re-plans
@@ -728,6 +781,7 @@ export function AppStateProvider({
       effectiveAvailability,
 
       health,
+      nearTermWorkload,
 
       // Public shape is unchanged (RescheduleResult | null) — reschedule.tsx
       // needed zero changes for Phase 3E. Internally this is just a view
@@ -796,6 +850,7 @@ export function AppStateProvider({
       unavailablePeriods,
       effectiveAvailability,
       health,
+      nearTermWorkload,
       pendingProposal,
       pendingExplanations,
       lastAcceptedChange,

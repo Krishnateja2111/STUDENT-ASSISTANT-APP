@@ -58,6 +58,7 @@ export default function DashboardScreen() {
     scheduledBlocks,
     effectiveAvailability,
     health,
+    nearTermWorkload,
     markTaskCompleted,
     reopenTask,
     lastAcceptedChange,
@@ -249,35 +250,35 @@ export default function DashboardScreen() {
               {healthMeta.label}
             </ThemedText>
           </View>
-          <ThemedText type="meta" themeColor="textSecondary">
-            {health.message}
-          </ThemedText>
           {/*
-            Phase 3H — getScheduleHealth (protected, unmodified) is
-            intentionally whole-horizon: every active task's required time
-            against total available time, not "today." This card was
-            already separated from Today's stats in Phase 3G; this one
-            static line removes any remaining ambiguity about what it's
-            actually measuring, without touching the underlying calculation.
+            Bug fix: health.message (from getScheduleHealth, protected) says
+            "You have Xh of work due before {nearest deadline} but only Yh
+            scheduled" — but X is the sum of EVERY active task's time, not
+            just the ones actually due by that deadline (most are due
+            later). Reproduced live: it claimed "9h due before Wednesday"
+            when only one 45-minute task genuinely was. The status badge
+            above (red/yellow/green) is still that protected file's real,
+            more rigorous whole-horizon placement simulation — untouched,
+            still authoritative. Only the misleading sentence is replaced,
+            with two separately-correct ones built from nearTermWorkload
+            (app-state.tsx) — the same real tasks/effectiveAvailability
+            data, just summed and labeled honestly.
           */}
-          <ThemedText type="small" themeColor="textMuted">
-            Reflects your overall workload across all upcoming deadlines — not just today.
-          </ThemedText>
-          {/*
-            The message above can read as contradictory (e.g. "12.9h due
-            but 32h scheduled" while still saying Overloaded) — that's not a
-            bug: the hours-scheduled figure counts ALL your availability
-            over the next couple weeks, but a near-term deadline can only
-            draw on whatever falls before IT specifically. Plenty of total
-            time later doesn't help a task due sooner than that. This line
-            explains the real mechanism rather than leaving the apparent
-            contradiction unexplained.
-          */}
-          {(health.status === 'red' || health.status === 'yellow') && (
-            <ThemedText type="small" themeColor="textMuted">
-              The scheduled-hours figure counts all your upcoming availability, not just before this deadline — extra
-              time later doesn&apos;t help work that&apos;s due sooner.
-            </ThemedText>
+          {nearTermWorkload && (
+            <>
+              <ThemedText type="meta" themeColor="textSecondary">
+                Across all your upcoming deadlines: {formatMinutes(nearTermWorkload.neededMinutesTotal)} of work,{' '}
+                {formatMinutes(nearTermWorkload.availableMinutesTotal)} of availability.
+                {health.suggestedDeferrals[0] && (health.status === 'red' || health.status === 'yellow')
+                  ? ` Consider deferring ${health.suggestedDeferrals[0].title}.`
+                  : ''}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textMuted">
+                Due by your next deadline ({new Date(nearTermWorkload.nearestDeadline).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}):{' '}
+                {formatMinutes(nearTermWorkload.neededMinutesNearTerm)} needed,{' '}
+                {formatMinutes(nearTermWorkload.availableMinutesNearTerm)} available before then.
+              </ThemedText>
+            </>
           )}
         </Card>
       </View>
