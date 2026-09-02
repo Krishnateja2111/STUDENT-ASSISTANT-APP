@@ -199,9 +199,18 @@ export default function WeeklyProgressScreen() {
               const isToday = dayKeyOf(day) === dayKeyOf(getNow());
               return (
                 <View key={i} style={styles.chartColumn}>
+                  {/*
+                    Bug fix (reported: "bars are mixed up with colors"):
+                    the outer fill used to be a translucent BRAND color
+                    with a solid SUCCESS-green overlay for the completed
+                    portion — two different hues on the same bar. Both are
+                    green now (light green = planned, solid green =
+                    completed within it) — one color family, easy to read
+                    at a glance: how full and how green.
+                  */}
                   <View style={[styles.barTrack, { backgroundColor: theme.backgroundSelected }]}>
                     {planned > 0 && (
-                      <View style={[styles.barFill, { height: Math.max(barHeight, 3), backgroundColor: `${StatusColors.brand}55` }]}>
+                      <View style={[styles.barFill, { height: Math.max(barHeight, 3), backgroundColor: `${StatusColors.success}33` }]}>
                         {completed > 0 && (
                           <View
                             style={[

@@ -243,7 +243,7 @@ export default function ProfileScreen() {
           description="Planned vs. completed, by week"
           onPress={() => router.push('/weekly-progress')}
         />
-        <ListRow icon="notifications-outline" label="Notifications" description="Reminders and summaries" onPress={() => router.push('/settings')} />
+        <ListRow icon="notifications-outline" label="Notifications" description="Reminders and summaries" onPress={() => router.push('/notifications')} />
         <ListRow icon="time-outline" label="Study availability" description="When you can be scheduled" onPress={() => router.push('/settings')} />
       </Card>
 
