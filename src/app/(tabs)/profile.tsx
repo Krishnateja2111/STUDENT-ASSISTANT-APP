@@ -7,6 +7,7 @@ import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { ListRow } from '@/components/list-row';
+import { NavMenu } from '@/components/nav-menu';
 import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
 import { MinTouchTarget, Radius, Spacing, StatusColors } from '@/constants/theme';
@@ -30,6 +31,7 @@ export default function ProfileScreen() {
   const [bio, setBio] = useState(profile.bio ?? '');
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [showDiscardProfileEdit, setShowDiscardProfileEdit] = useState(false);
+  const [showNavMenu, setShowNavMenu] = useState(false);
 
   const hasProfileChanges =
     name !== profile.name ||
@@ -87,7 +89,7 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <ScreenHeader title="Profile" />
+      <ScreenHeader title="Profile" onMenuPress={() => setShowNavMenu(true)} />
 
       <Card style={styles.identityCard}>
         {editing ? (
@@ -274,6 +276,7 @@ export default function ProfileScreen() {
         }}
         onCancel={() => setShowDiscardProfileEdit(false)}
       />
+      <NavMenu visible={showNavMenu} onClose={() => setShowNavMenu(false)} />
     </ScrollView>
   );
 }

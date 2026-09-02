@@ -32,16 +32,22 @@ export const Colors = {
   },
 } as const;
 
+// Maroon swap (exploratory, per request) — only the primary/brand accent
+// changes; success/warning/danger keep their conventional meanings
+// (green=done, amber=caution, red=danger) since those are near-universal
+// and maroon isn't a natural fit for any of them. Picked a deep burgundy
+// distinct enough in hue from `danger`'s red-orange to stay
+// distinguishable at a glance, not just at a swatch.
 /** Sparingly-used status colors: icons/badges/borders only, never a full-width block. */
 export const StatusColors = {
   success: '#3FAE72',
   warning: '#D89B2A',
   danger: '#C64B3E',
-  brand: '#3D7A54',
+  brand: '#7A2333',
 } as const;
 
 /** Fallback accent palette for courses without an assigned colorTag — muted/earthy, to stay in the same family as the rest of the palette while still giving courses distinguishable colors. */
-export const CourseAccentPalette = ['#3D7A54', '#B08D57', '#6B7F8C', '#8C7A9E', '#7A9E7E', '#A67C6E'];
+export const CourseAccentPalette = ['#7A2333', '#B08D57', '#6B7F8C', '#8C7A9E', '#7A9E7E', '#A67C6E'];
 
 export const Radius = {
   sm: 8,

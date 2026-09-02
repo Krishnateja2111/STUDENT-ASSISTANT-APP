@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
+import { NavMenu } from '@/components/nav-menu';
 import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing, StatusColors } from '@/constants/theme';
@@ -37,6 +38,7 @@ export default function DocumentsScreen() {
   const [targetCourseId, setTargetCourseId] = useState(courses[0]?.id ?? '');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<DocumentFilter>('all');
+  const [showNavMenu, setShowNavMenu] = useState(false);
 
   const courseName = (courseId: string) => courses.find((c) => c.id === courseId)?.name ?? 'Unknown course';
 
@@ -70,6 +72,7 @@ export default function DocumentsScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <ScreenHeader
         title="Documents"
+        onMenuPress={() => setShowNavMenu(true)}
         right={
           <Pressable
             onPress={() => setUploading((v) => !v)}
@@ -190,6 +193,8 @@ export default function DocumentsScreen() {
           </Pressable>
         );
       })}
+
+      <NavMenu visible={showNavMenu} onClose={() => setShowNavMenu(false)} />
     </ScrollView>
   );
 }

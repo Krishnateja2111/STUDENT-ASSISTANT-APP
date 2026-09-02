@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Button } from '@/components/button';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
+import { NavMenu } from '@/components/nav-menu';
 import { ScheduledTaskCard } from '@/components/scheduled-task-card';
 import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
@@ -70,6 +71,7 @@ export default function CalendarScreen() {
   const [expandedBlockId, setExpandedBlockId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState(TODAY);
   const [pendingRemoveBlockId, setPendingRemoveBlockId] = useState<string | null>(null);
+  const [showNavMenu, setShowNavMenu] = useState(false);
   const theme = useTheme();
 
   const courseName = (courseId: string) => courses.find((c) => c.id === courseId)?.name ?? 'Unknown course';
@@ -81,6 +83,7 @@ export default function CalendarScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <ScreenHeader
         title="Calendar"
+        onMenuPress={() => setShowNavMenu(true)}
         right={
           selectedDay !== TODAY ? (
             <Button label="Today" variant="outlined" onPress={() => setSelectedDay(TODAY)} style={styles.todayButton} />
@@ -171,6 +174,7 @@ export default function CalendarScreen() {
         }}
         onCancel={() => setPendingRemoveBlockId(null)}
       />
+      <NavMenu visible={showNavMenu} onClose={() => setShowNavMenu(false)} />
     </ScrollView>
   );
 }

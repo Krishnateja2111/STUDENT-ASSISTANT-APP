@@ -1,9 +1,11 @@
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
+import { NavMenu } from '@/components/nav-menu';
 import { ProgressBar } from '@/components/progress-bar';
 import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
@@ -28,10 +30,11 @@ export default function CoursesScreen() {
   // independent of scheduling — a course with 5 unscheduled tasks and 0
   // completed is legitimately "0%", not a broken/empty state.
   const scheduledTaskIds = new Set(scheduledBlocks.map((b) => b.taskId));
+  const [showNavMenu, setShowNavMenu] = useState(false);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <ScreenHeader title="Courses" />
+      <ScreenHeader title="Courses" onMenuPress={() => setShowNavMenu(true)} />
 
       {courses.map((course) => {
         const courseTasks = tasks.filter((t) => t.courseId === course.id);
@@ -79,6 +82,8 @@ export default function CoursesScreen() {
       {courses.length === 0 && <EmptyState icon="school-outline" message="No courses yet." />}
 
       <Button label="+ Add course" onPress={() => router.push('/course-entry')} style={styles.addButton} />
+
+      <NavMenu visible={showNavMenu} onClose={() => setShowNavMenu(false)} />
     </ScrollView>
   );
 }

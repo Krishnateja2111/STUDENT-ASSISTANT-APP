@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { NavMenu } from '@/components/nav-menu';
 import { ProgressBar } from '@/components/progress-bar';
 import { ScheduledTaskCard } from '@/components/scheduled-task-card';
 import { ScreenHeader } from '@/components/screen-header';
@@ -66,6 +67,7 @@ export default function DashboardScreen() {
   const { profile } = useContentState();
   const theme = useTheme();
   const [dismissedNudgeTaskId, setDismissedNudgeTaskId] = useState<string | null>(null);
+  const [showNavMenu, setShowNavMenu] = useState(false);
   const TODAY = getToday();
   const NOW = getNow();
 
@@ -127,6 +129,7 @@ export default function DashboardScreen() {
       <ScreenHeader
         title={`${greeting(NOW.getHours())}, ${profile.name.split(' ')[0]}`}
         subtitle={formatDayHeading(TODAY)}
+        onMenuPress={() => setShowNavMenu(true)}
         right={
           <>
             <Pressable
@@ -446,6 +449,8 @@ export default function DashboardScreen() {
         onPress={() => router.push('/task-entry')}
         style={styles.addButton}
       />
+
+      <NavMenu visible={showNavMenu} onClose={() => setShowNavMenu(false)} />
     </ScrollView>
   );
 }
