@@ -86,6 +86,23 @@ describe('replanTasks', () => {
     expect(result.scheduledBlocks.some((b) => b.taskId === 'n1')).toBe(false);
   });
 
+  test('bug fix: overflows rather than being placed after its own deadline when free time exists only later', () => {
+    // 30 free minutes before the deadline (not enough for this 60-minute
+    // task), but a second, larger window well after it -- reproduces the
+    // live-confirmed bug where a task due Sept 3 was silently scheduled
+    // across Sept 7-9 instead of correctly overflowing.
+    const tightTask = task({ id: 'n1', estimatedMinutes: 60, dueDate: '2026-08-24T09:30:00' });
+    const availability: AvailabilityBlock[] = [
+      { id: 'a1', start: '2026-08-24T09:00:00', end: '2026-08-24T09:30:00' }, // before deadline: only 30 min
+      { id: 'a2', start: '2026-08-30T09:00:00', end: '2026-08-30T12:00:00' }, // after deadline: plenty of room
+    ];
+
+    const result = replanTasks([tightTask], [tightTask], availability, []);
+
+    expect(result.overflow).toEqual([tightTask]);
+    expect(result.scheduledBlocks.some((b) => b.taskId === 'n1')).toBe(false);
+  });
+
   test('re-planning the same task twice never leaves duplicate blocks for it', () => {
     const editedTask = task({ id: 'e1', estimatedMinutes: 60 });
     const availability: AvailabilityBlock[] = [

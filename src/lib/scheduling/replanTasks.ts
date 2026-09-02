@@ -92,12 +92,23 @@ export function replanTasks(
     const durationMs = task.estimatedMinutes * 60_000;
     const deadlineMs = new Date(task.dueDate).getTime();
 
-    let allocation = allocateFromSegments(freeSegments, durationMs, referenceTimeMs, deadlineMs);
-    if (!allocation) {
-      // Mirrors rescheduleAfterMiss: if the deadline genuinely can't be
-      // honored, retry without it rather than abandoning the task outright.
-      allocation = allocateFromSegments(freeSegments, durationMs, referenceTimeMs, Infinity);
-    }
+    // Bug fix: this used to retry without the deadline when it couldn't be
+    // honored, mirroring rescheduleAfterMiss's "give a missed task some
+    // slot rather than none" reasoning. That reasoning doesn't transfer to
+    // this function's actual callers (addTask/updateTask, via
+    // planTaskChange in app-state.tsx) — a brand-new or just-edited task
+    // has no "already missed, needs remediation" excuse; its deadline is
+    // literally what the student just told the app matters. Reproduced
+    // live: a task due Sept 3 was silently placed across Sept 7-9 with no
+    // warning at all -- exactly the "app schedules past my deadline
+    // without telling me" failure a scheduling app cannot have. A task
+    // that genuinely can't fit before its deadline now overflows instead,
+    // which planTaskChange already turns into a real, clear message
+    // ("X couldn't be fit into your schedule...") via the existing review
+    // flow -- that path already existed, it just could never trigger
+    // while this silently succeeded instead. rescheduleAfterMiss.ts
+    // itself (fully protected, missed-task recovery only) is unchanged.
+    const allocation = allocateFromSegments(freeSegments, durationMs, referenceTimeMs, deadlineMs);
 
     if (!allocation) {
       overflow.push(task);
