@@ -208,16 +208,36 @@ export default function DashboardScreen() {
         )}
       </Card>
 
+      {/*
+        Bug fix: this used to be a single vague banner that opened the
+        blank "New Task" creation form on tap -- unrelated to what it
+        claimed ("N tasks still need scheduling"), and confusing for
+        exactly that reason (reported live: it read as a form for
+        creating a new task, not a way to see which existing tasks need
+        attention). It now lists the actual unscheduled tasks, each
+        opening its own Task Detail (real course, type, duration, and an
+        Edit action to actually help it get scheduled).
+      */}
       {unscheduledPendingTasks.length > 0 && (
-        <Pressable onPress={() => router.push('/task-entry')}>
-          <Card style={styles.unscheduledCard}>
-            <Ionicons name="calendar-clear-outline" size={18} color={theme.textSecondary} />
-            <ThemedText type="meta" themeColor="textSecondary" style={styles.unscheduledText}>
-              {unscheduledPendingTasks.length} task{unscheduledPendingTasks.length > 1 ? 's' : ''} still need
-              {unscheduledPendingTasks.length > 1 ? '' : 's'} scheduling
-            </ThemedText>
-          </Card>
-        </Pressable>
+        <View style={styles.section}>
+          <SectionHeader
+            title={`${unscheduledPendingTasks.length} task${unscheduledPendingTasks.length > 1 ? 's' : ''} still need${unscheduledPendingTasks.length > 1 ? '' : 's'} scheduling`}
+          />
+          {unscheduledPendingTasks.map((task) => (
+            <Pressable key={task.id} onPress={() => router.push(`/task/${task.id}`)}>
+              <Card accentColor={courseAccent(task.courseId)} style={styles.unscheduledCard}>
+                <Ionicons name="calendar-clear-outline" size={18} color={theme.textSecondary} />
+                <View style={styles.unscheduledText}>
+                  <ThemedText type="cardTitle">{task.title}</ThemedText>
+                  <ThemedText type="meta" themeColor="textMuted">
+                    {courseName(task.courseId)}
+                  </ThemedText>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+              </Card>
+            </Pressable>
+          ))}
+        </View>
       )}
 
       <View style={styles.section}>
