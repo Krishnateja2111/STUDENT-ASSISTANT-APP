@@ -114,6 +114,19 @@ export default function RescheduleScreen() {
           const change = changeFor(entry.taskId);
           const wasScheduled = Boolean(change?.previousBlock);
           const hasNewTime = Boolean(change?.newBlock);
+          // Bug fix (reported live): missed-task recovery can place a task
+          // after its own original deadline when there genuinely wasn't
+          // room before it (rescheduleAfterMiss, fully protected,
+          // deliberately falls back to the earliest slot available at all
+          // rather than abandoning a missed task — real design intent, not
+          // a bug). But that was invisible here, reading as "the app isn't
+          // keeping an eye on the deadline." Can't change the protected
+          // engine's placement, so this makes it visible instead.
+          const entryTask = tasks.find((t) => t.id === entry.taskId);
+          const isPastDeadline =
+            Boolean(change?.newBlock) &&
+            Boolean(entryTask) &&
+            new Date(change!.newBlock!.end).getTime() > new Date(entryTask!.dueDate).getTime();
           return (
             <Card key={entry.taskId} accentColor={courseAccent(entry.taskId)} style={styles.card}>
               <View style={styles.cardHeader}>
@@ -139,6 +152,14 @@ export default function RescheduleScreen() {
                   <ThemedText type="screenTitle" style={styles.movedNewTime}>
                     {formatBlockTime(change?.newBlock)}
                   </ThemedText>
+                  {isPastDeadline && (
+                    <View style={styles.pastDeadlineBadge}>
+                      <Ionicons name="alert-circle" size={14} color={StatusColors.danger} />
+                      <ThemedText type="small" style={styles.pastDeadlineText}>
+                        After the original deadline — no room was found before it
+                      </ThemedText>
+                    </View>
+                  )}
                 </View>
               ) : (
                 <View style={styles.unresolvedBadge}>
@@ -296,6 +317,18 @@ const styles = StyleSheet.create({
   movedNewTime: {
     fontSize: 22,
     lineHeight: 28,
+  },
+  pastDeadlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    marginTop: Spacing.one,
+    paddingHorizontal: Spacing.two,
+  },
+  pastDeadlineText: {
+    color: StatusColors.danger,
+    flexShrink: 1,
+    textAlign: 'center',
   },
   unresolvedBadge: {
     paddingVertical: Spacing.two,

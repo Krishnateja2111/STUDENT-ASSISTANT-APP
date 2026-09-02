@@ -84,6 +84,18 @@ export default function RecoveryImpactScreen() {
   // anything yet.
   const preview = rescheduleAfterMiss(task, tasks, effectiveAvailability);
   const willOverflow = preview.overflow.some((t) => t.id === task.id);
+  // rescheduleAfterMiss (fully protected) deliberately falls back to the
+  // earliest slot available at all when the task's own deadline can't be
+  // honored, rather than leaving a missed task unscheduled forever — a
+  // real, intentional design choice for recovery specifically, not a bug.
+  // But reported live: that fallback can be invisible to the student,
+  // reading as "the engine isn't keeping an eye on the deadline." Can't
+  // change the protected engine's placement choice, but the review here
+  // can and should say so plainly rather than silently offering it.
+  const proposedBlock = preview.changes.find((c) => c.taskId === task.id)?.newBlock;
+  const willBePastDeadline = proposedBlock
+    ? new Date(proposedBlock.end).getTime() > new Date(task.dueDate).getTime()
+    : false;
 
   const handleAnalyze = () => {
     markMissed(task.id);
@@ -145,8 +157,8 @@ export default function RecoveryImpactScreen() {
             Deadline risk
           </ThemedText>
           <StatusBadge
-            label={willOverflow ? "May not fit" : due.label}
-            color={willOverflow ? StatusColors.danger : due.color}
+            label={willOverflow ? 'May not fit' : willBePastDeadline ? 'Past deadline' : due.label}
+            color={willOverflow || willBePastDeadline ? StatusColors.danger : due.color}
           />
         </View>
         <View style={styles.impactRow}>
@@ -161,6 +173,13 @@ export default function RecoveryImpactScreen() {
           <ThemedText type="small" style={styles.overflowWarning}>
             Given your current availability, this task may not fit before its deadline. You'll be able to see
             exactly what the engine could and couldn't place on the next screen.
+          </ThemedText>
+        )}
+        {willBePastDeadline && proposedBlock && (
+          <ThemedText type="small" style={styles.overflowWarning}>
+            There wasn&apos;t enough room before this task&apos;s deadline — the best time the engine found is{' '}
+            {new Date(proposedBlock.end).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+            , after the original deadline of {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}. You can accept it anyway, or free up time before the deadline and try again.
           </ThemedText>
         )}
       </Card>
