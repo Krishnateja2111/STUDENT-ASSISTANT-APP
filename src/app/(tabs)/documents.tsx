@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
@@ -32,6 +33,7 @@ export default function DocumentsScreen() {
   const { courses } = useAppState();
   const { documents, addDocument } = useContentState();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const [uploading, setUploading] = useState(false);
   const [pickerBusy, setPickerBusy] = useState(false);
   const [pickerError, setPickerError] = useState<string | null>(null);
@@ -69,7 +71,7 @@ export default function DocumentsScreen() {
   }, [documents, query, filter, courses]);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + Spacing.four }]}>
       <ScreenHeader
         title="Documents"
         onMenuPress={() => setShowNavMenu(true)}

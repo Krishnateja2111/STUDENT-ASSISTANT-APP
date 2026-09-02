@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
@@ -21,6 +22,7 @@ export default function ProfileScreen() {
   const { courses, tasks, logout } = useAppState();
   const { profile, updateProfile } = useContentState();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(profile.name);
@@ -88,7 +90,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + Spacing.four }]}>
       <ScreenHeader title="Profile" onMenuPress={() => setShowNavMenu(true)} />
 
       <Card style={styles.identityCard}>

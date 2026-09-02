@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -73,6 +74,7 @@ export default function CalendarScreen() {
   const [pendingRemoveBlockId, setPendingRemoveBlockId] = useState<string | null>(null);
   const [showNavMenu, setShowNavMenu] = useState(false);
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   const courseName = (courseId: string) => courses.find((c) => c.id === courseId)?.name ?? 'Unknown course';
   const groups = groupByDay(scheduledBlocks);
@@ -80,7 +82,7 @@ export default function CalendarScreen() {
   const dayBlocks = groups[selectedDay] ?? [];
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + Spacing.four }]}>
       <ScreenHeader
         title="Calendar"
         onMenuPress={() => setShowNavMenu(true)}

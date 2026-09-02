@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
@@ -66,6 +67,7 @@ export default function DashboardScreen() {
   } = useAppState();
   const { profile } = useContentState();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const [dismissedNudgeTaskId, setDismissedNudgeTaskId] = useState<string | null>(null);
   const [showNavMenu, setShowNavMenu] = useState(false);
   const TODAY = getToday();
@@ -125,7 +127,7 @@ export default function DashboardScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + Spacing.four }]}>
       <ScreenHeader
         title={`${greeting(NOW.getHours())}, ${profile.name.split(' ')[0]}`}
         subtitle={formatDayHeading(TODAY)}

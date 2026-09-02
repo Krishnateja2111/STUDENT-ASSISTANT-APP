@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
@@ -31,9 +32,10 @@ export default function CoursesScreen() {
   // completed is legitimately "0%", not a broken/empty state.
   const scheduledTaskIds = new Set(scheduledBlocks.map((b) => b.taskId));
   const [showNavMenu, setShowNavMenu] = useState(false);
+  const insets = useSafeAreaInsets();
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + Spacing.four }]}>
       <ScreenHeader title="Courses" onMenuPress={() => setShowNavMenu(true)} />
 
       {courses.map((course) => {
