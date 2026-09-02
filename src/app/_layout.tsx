@@ -54,6 +54,10 @@ function ThemedNavigator() {
         <Stack.Screen name="task/[id]" options={{ headerShown: true, title: 'Task' }} />
         <Stack.Screen name="document/[id]" options={{ headerShown: true, title: 'Document' }} />
         <Stack.Screen name="weekly-progress" options={{ headerShown: true, title: 'Weekly Progress' }} />
+        <Stack.Screen
+          name="about"
+          options={{ presentation: 'modal', headerShown: true, title: 'About' }}
+        />
       </Stack>
     </ThemeProvider>
   );

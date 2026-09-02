@@ -68,6 +68,12 @@ export function NavMenu({ visible, onClose }: NavMenuProps) {
               description="Availability, appearance, and more"
               onPress={() => go('/settings')}
             />
+            <ListRow
+              icon="information-circle-outline"
+              label="About"
+              description="Data & privacy, app version"
+              onPress={() => go('/about')}
+            />
 
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
