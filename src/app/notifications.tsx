@@ -17,23 +17,26 @@ const HEALTH_LABEL: Record<'yellow' | 'red', { label: string; color: string }> =
 /**
  * Notifications — what the bell icon actually opens now, instead of
  * jumping straight to Settings (a real point of confusion: tapping a bell
- * and landing on a settings screen with no notifications on it). Every row
- * here is a real, already-computed alert this app already tracks elsewhere
- * (missed tasks, the lowest-priority "needs input" task, an overloaded/
- * tight workload outlook, unscheduled pending work) — nothing invented,
- * and each one links to the screen that actually lets you act on it.
+ * and landing on a settings screen with no notifications on it).
+ *
+ * Deliberately limited to real events — a task got missed, or the workload
+ * outlook crossed into yellow/red — rather than ambient state. The
+ * lowest-priority "needs input" nudge and the unscheduled-task count are
+ * always-somewhat-true summaries with no moment of origin (there's nearly
+ * always *some* lowest-priority task the algorithm could name), so they
+ * never resolve or feel new — they just look the same on every visit. Those
+ * already live on the Dashboard as persistent cards; showing them here too
+ * just restates the same standing state under a label that implies
+ * something happened.
  */
 export default function NotificationsScreen() {
-  const { tasks, scheduledBlocks, health } = useAppState();
+  const { tasks, health } = useAppState();
   const theme = useTheme();
 
   const missedTasks = tasks.filter((t) => t.status === 'missed');
-  const scheduledTaskIds = new Set(scheduledBlocks.map((b) => b.taskId));
-  const unscheduledPendingTasks = tasks.filter((t) => t.status === 'pending' && !scheduledTaskIds.has(t.id));
-  const needsInputTask = health.suggestedDeferrals.find((t) => t.status !== 'missed');
   const healthAlert = health.status === 'yellow' || health.status === 'red' ? HEALTH_LABEL[health.status] : null;
 
-  const hasAnything = missedTasks.length > 0 || unscheduledPendingTasks.length > 0 || Boolean(healthAlert);
+  const hasAnything = missedTasks.length > 0 || Boolean(healthAlert);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -90,38 +93,6 @@ export default function NotificationsScreen() {
             </ThemedText>
           </View>
         </Card>
-      )}
-
-      {needsInputTask && (
-        <Pressable onPress={() => router.push(`/task/${needsInputTask.id}`)}>
-          <Card style={styles.row}>
-            <Ionicons name="sparkles-outline" size={20} color={StatusColors.brand} />
-            <View style={styles.rowText}>
-              <ThemedText type="cardTitle">Needs input: {needsInputTask.title}</ThemedText>
-              <ThemedText type="meta" themeColor="textSecondary">
-                Your lowest-priority item right now
-              </ThemedText>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
-          </Card>
-        </Pressable>
-      )}
-
-      {unscheduledPendingTasks.length > 0 && (
-        <Pressable onPress={() => router.push('/task-entry')}>
-          <Card style={styles.row}>
-            <Ionicons name="calendar-clear-outline" size={20} color={theme.textSecondary} />
-            <View style={styles.rowText}>
-              <ThemedText type="cardTitle">
-                {unscheduledPendingTasks.length} task{unscheduledPendingTasks.length > 1 ? 's' : ''} still need
-                {unscheduledPendingTasks.length > 1 ? '' : 's'} scheduling
-              </ThemedText>
-              <ThemedText type="meta" themeColor="textSecondary">
-                Add more availability, or adjust their deadline/duration
-              </ThemedText>
-            </View>
-          </Card>
-        </Pressable>
       )}
     </ScrollView>
   );
