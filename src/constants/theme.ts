@@ -32,23 +32,21 @@ export const Colors = {
   },
 } as const;
 
-// Gray swap (exploratory, per request — maroon didn't land) — back to the
-// original "gray / green / bone" idea, this time actually trying gray as
-// the primary/brand accent. A warm charcoal, not a neutral/cool gray, to
-// stay in the same warm undertone as the rest of the palette (bone
-// backgrounds, warm text) — and deliberately darker/more saturated than
-// `textSecondary` so it still reads as an accent, not body text.
-// success/warning/danger unchanged (green=done, amber=caution, red=danger).
+// Light gray / light green (exploratory, per request — the dark charcoal
+// gray didn't land either). Lightened both the brand gray and success
+// green a step from the previous pass — still warm-toned, still dark
+// enough at `brand` for white button text to stay legible, just softer
+// than the near-charcoal before it. warning/danger unchanged.
 /** Sparingly-used status colors: icons/badges/borders only, never a full-width block. */
 export const StatusColors = {
-  success: '#3FAE72',
+  success: '#5BC48D',
   warning: '#D89B2A',
   danger: '#C64B3E',
-  brand: '#524D46',
+  brand: '#8C8677',
 } as const;
 
 /** Fallback accent palette for courses without an assigned colorTag — muted/earthy, to stay in the same family as the rest of the palette while still giving courses distinguishable colors. */
-export const CourseAccentPalette = ['#524D46', '#B08D57', '#6B7F8C', '#8C7A9E', '#7A9E7E', '#A67C6E'];
+export const CourseAccentPalette = ['#8C8677', '#B08D57', '#6B7F8C', '#8C7A9E', '#7A9E7E', '#A67C6E'];
 
 export const Radius = {
   sm: 8,

@@ -135,36 +135,53 @@ function AvailabilityRuleRow({
     setSynced(rule);
     setDraft(rule);
   }
+  // Bug fix (reported: "I don't see the Appearance/theme option") --
+  // every rule used to show its full weekday + two 12-chip time pickers
+  // inline, permanently, with no way to collapse them. With 7 rules (one
+  // per weekday, this app's default) that's a wall of pickers burying
+  // every section below it, including Appearance -- the actual root cause
+  // of "I don't see it", not a missing toggle. Collapsed by default now,
+  // matching the summary-then-expand pattern DateTimePicker already uses
+  // for one-time blocks.
+  const [expanded, setExpanded] = useState(false);
   const hasChanges =
     draft.weekday !== rule.weekday || draft.startTime !== rule.startTime || draft.endTime !== rule.endTime;
 
+  const handleSave = () => {
+    onCommit({ weekday: draft.weekday, startTime: draft.startTime, endTime: draft.endTime });
+    setExpanded(false);
+  };
+
   return (
     <Card style={styles.availabilityCard}>
-      <ThemedText type="cardTitle">
-        Every {WEEKDAY_NAMES[rule.weekday]}, {formatTimeRange(rule.startTime, rule.endTime)}
-      </ThemedText>
-      <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
-        DAY
-      </ThemedText>
-      <WeekdayPicker value={draft.weekday} onChange={(weekday) => setDraft((d) => ({ ...d, weekday }))} />
-      <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
-        START
-      </ThemedText>
-      <TimePicker value={draft.startTime} onChange={(startTime) => setDraft((d) => ({ ...d, startTime }))} />
-      <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
-        END
-      </ThemedText>
-      <TimePicker value={draft.endTime} onChange={(endTime) => setDraft((d) => ({ ...d, endTime }))} />
-      <View style={styles.rowActions}>
-        {hasChanges && (
-          <Button
-            label="Save"
-            onPress={() => onCommit({ weekday: draft.weekday, startTime: draft.startTime, endTime: draft.endTime })}
-            style={styles.rowActionButton}
-          />
-        )}
-        <Button label="Remove" variant="outlined" color={StatusColors.danger} onPress={onRemove} style={styles.rowActionButton} />
-      </View>
+      <Pressable onPress={() => setExpanded((v) => !v)} style={styles.ruleSummaryRow}>
+        <ThemedText type="cardTitle" style={styles.ruleSummaryText}>
+          Every {WEEKDAY_NAMES[rule.weekday]}, {formatTimeRange(rule.startTime, rule.endTime)}
+        </ThemedText>
+        <ThemedText type="small" style={{ color: StatusColors.brand }}>
+          {expanded ? 'Close' : 'Edit'}
+        </ThemedText>
+      </Pressable>
+      {expanded && (
+        <>
+          <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
+            DAY
+          </ThemedText>
+          <WeekdayPicker value={draft.weekday} onChange={(weekday) => setDraft((d) => ({ ...d, weekday }))} />
+          <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
+            START
+          </ThemedText>
+          <TimePicker value={draft.startTime} onChange={(startTime) => setDraft((d) => ({ ...d, startTime }))} />
+          <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
+            END
+          </ThemedText>
+          <TimePicker value={draft.endTime} onChange={(endTime) => setDraft((d) => ({ ...d, endTime }))} />
+          <View style={styles.rowActions}>
+            {hasChanges && <Button label="Save" onPress={handleSave} style={styles.rowActionButton} />}
+            <Button label="Remove" variant="outlined" color={StatusColors.danger} onPress={onRemove} style={styles.rowActionButton} />
+          </View>
+        </>
+      )}
     </Card>
   );
 }
@@ -682,6 +699,16 @@ const styles = StyleSheet.create({
   },
   availabilityCard: {
     gap: Spacing.one,
+  },
+  ruleSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+    minHeight: 32,
+  },
+  ruleSummaryText: {
+    flex: 1,
   },
   label: {
     letterSpacing: 0.6,
