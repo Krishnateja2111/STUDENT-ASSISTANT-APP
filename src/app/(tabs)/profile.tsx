@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,7 +11,7 @@ import { ListRow } from '@/components/list-row';
 import { NavMenu } from '@/components/nav-menu';
 import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
-import { MinTouchTarget, Radius, Spacing, StatusColors } from '@/constants/theme';
+import { IconColors, MinTouchTarget, Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAppState } from '@/state/app-state';
 import { type AcademicYear, useContentState } from '@/state/content-state';
@@ -89,9 +89,48 @@ export default function ProfileScreen() {
     router.replace('/auth');
   };
 
+  // Bug fix (reported live): Profile is a bottom-tab screen, so its header
+  // only ever showed the hamburger menu — fine when you got here by tapping
+  // the Profile tab, but Settings' own "Edit profile" row also lands here,
+  // and there was no way back to Settings except reopening the hamburger
+  // and tapping Settings again.
+  //
+  // router.canGoBack() looked like the obvious signal for "was this pushed
+  // from somewhere," but verified live it's NOT reliable here: it was
+  // already true for a completely ordinary tab-bar tap on Profile (the
+  // auth -> dashboard -> profile chain alone gives it real history to go
+  // back through), so it showed the hamburger AND the back arrow together
+  // regardless of how you actually arrived. An explicit ?from=settings
+  // param on the one link that should trigger this (see settings.tsx) is
+  // deterministic instead of inferring intent from ambient nav history.
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const cameFromSettings = from === 'settings';
+
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + Spacing.four }]}>
-      <ScreenHeader title="Profile" onMenuPress={() => setShowNavMenu(true)} />
+      <ScreenHeader
+        title="Profile"
+        // Bug fix (caught live, three times over): router.back() lands on
+        // Dashboard, not Settings -- pushing into an already-mounted
+        // tab-group screen (Profile is part of the (tabs) group) dismisses
+        // the Settings modal from history immediately rather than stacking
+        // on top of it. router.push('/settings') "worked" once but pushed a
+        // genuinely NEW Settings screen every time, whose own default back
+        // button pointed straight at this still-mounted Profile -- an
+        // unbounded Profile-pushes-Settings-pushes-Profile chain. Switching
+        // that to router.replace('/settings') still looped in real usage
+        // (reported live, reproduced): replace() called from inside a
+        // NESTED tab-group navigator doesn't cleanly resolve against the
+        // OUTER stack's own Settings entry, so it isn't actually equivalent
+        // to "go back to the Settings that's already there."
+        // router.dismissTo is expo-router's purpose-built API for exactly
+        // this: pop back to an EXISTING matching screen already in history
+        // (dismissing whatever was pushed on top of it), rather than
+        // pushing or replacing with a fresh instance -- the actual Settings
+        // entry from the hamburger menu, not a new one.
+        onBackPress={cameFromSettings ? () => router.dismissTo('/settings') : undefined}
+        onMenuPress={cameFromSettings ? undefined : () => setShowNavMenu(true)}
+      />
 
       <Card style={styles.identityCard}>
         {editing ? (
@@ -234,19 +273,21 @@ export default function ProfileScreen() {
 
       <Card style={styles.settingsCard}>
         <ListRow
-          icon="person-outline"
+          icon="person"
+          iconColor={IconColors.plum}
           label="Personal information"
           description="Name, email, school, major, year, bio"
           onPress={startEditing}
         />
         <ListRow
-          icon="bar-chart-outline"
+          icon="bar-chart"
+          iconColor={IconColors.denim}
           label="Weekly progress"
           description="Planned vs. completed, by week"
           onPress={() => router.push('/weekly-progress')}
         />
-        <ListRow icon="notifications-outline" label="Notifications" description="Reminders and summaries" onPress={() => router.push('/notifications')} />
-        <ListRow icon="time-outline" label="Study availability" description="When you can be scheduled" onPress={() => router.push('/settings')} />
+        <ListRow icon="notifications" iconColor={IconColors.pumpkin} label="Notifications" description="Reminders and summaries" onPress={() => router.push('/notifications')} />
+        <ListRow icon="time" iconColor={IconColors.oliveGold} label="Study availability" description="When you can be scheduled" onPress={() => router.push('/availability')} />
       </Card>
 
       <Button

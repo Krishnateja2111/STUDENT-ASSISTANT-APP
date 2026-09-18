@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/hooks/use-theme';
+import { StatusColors } from '@/constants/theme';
 
 // Icon (24) + label + top/bottom padding, measured to fully fit "Dashboard"/
 // "Calendar" labels (see design-review verification) — independent of the
@@ -18,7 +19,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.text,
+        tabBarActiveTintColor: StatusColors.brand,
         tabBarInactiveTintColor: theme.textMuted,
         tabBarStyle: {
           backgroundColor: theme.backgroundElement,

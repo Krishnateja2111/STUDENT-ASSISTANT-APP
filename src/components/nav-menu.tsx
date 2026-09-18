@@ -5,7 +5,7 @@ import { Avatar } from './avatar';
 import { ListRow } from './list-row';
 import { ThemedText } from './themed-text';
 
-import { CardShadow, Spacing, StatusColors } from '@/constants/theme';
+import { CardShadow, IconColors, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAppState } from '@/state/app-state';
 import { useContentState } from '@/state/content-state';
@@ -52,24 +52,35 @@ export function NavMenu({ visible, onClose }: NavMenuProps) {
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
             <ListRow
-              icon="bar-chart-outline"
+              icon="bar-chart"
+              iconColor={IconColors.denim}
               label="Weekly progress"
               description="Planned vs. completed, by week"
               onPress={() => go('/weekly-progress')}
             />
             <ListRow
-              icon="notifications-outline"
+              icon="notifications"
+              iconColor={IconColors.pumpkin}
               label="Notifications"
               onPress={() => go('/notifications')}
             />
             <ListRow
-              icon="settings-outline"
+              icon="settings"
+              iconColor={IconColors.umber}
               label="Settings"
-              description="Availability, appearance, and more"
+              description="Privacy, notifications, and more"
               onPress={() => go('/settings')}
             />
             <ListRow
-              icon="information-circle-outline"
+              icon="contrast"
+              iconColor={IconColors.dustyTeal}
+              label="Appearance"
+              description="Light, dark, or match your device"
+              onPress={() => go('/appearance')}
+            />
+            <ListRow
+              icon="information-circle"
+              iconColor={IconColors.slate}
               label="About"
               description="Data & privacy, app version"
               onPress={() => go('/about')}
@@ -78,7 +89,7 @@ export function NavMenu({ visible, onClose }: NavMenuProps) {
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
             <ListRow
-              icon="log-out-outline"
+              icon="log-out"
               label="Sign out"
               iconColor={StatusColors.danger}
               onPress={() => {

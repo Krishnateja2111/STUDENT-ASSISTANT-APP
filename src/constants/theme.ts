@@ -45,6 +45,17 @@ export const StatusColors = {
 /** Fallback accent palette for courses without an assigned colorTag — muted/earthy, to stay in the same family as the rest of the palette while still giving courses distinguishable colors. */
 export const CourseAccentPalette = ['#3D7A54', '#B08D57', '#6B7F8C', '#8C7A9E', '#7A9E7E', '#A67C6E'];
 
+/** Accent colors for functional icons (list rows, tab bar, headers) — distinguishes icon groups by purpose, not just decoration. "Autumn Harvest" set, stays in the same warm/earthy family as the rest of the palette. Reuses StatusColors.brand/danger for the primary and destructive roles, which are already established elsewhere. */
+export const IconColors = {
+  plum: '#8E3F76',
+  denim: '#2C5F8A',
+  pumpkin: '#D9691E',
+  oliveGold: '#A67C1E',
+  umber: '#6B5B4D',
+  dustyTeal: '#3E7A72',
+  slate: '#5C6B78',
+} as const;
+
 export const Radius = {
   sm: 8,
   md: 12,

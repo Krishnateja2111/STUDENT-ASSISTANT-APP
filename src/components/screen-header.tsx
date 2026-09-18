@@ -13,15 +13,34 @@ export interface ScreenHeaderProps {
   right?: ReactNode;
   /** Renders a hamburger-menu button to the left of the title — pass to open the app-wide nav menu (see NavMenu). Omit to leave the header as it was. */
   onMenuPress?: () => void;
+  /**
+   * Renders a back arrow instead of the hamburger — for a tab screen that
+   * was pushed onto from somewhere outside the tab bar (e.g. Settings'
+   * "Edit profile" row landing on the Profile tab), where the hamburger
+   * alone left no way back to where you came from. Takes priority over
+   * onMenuPress when both are passed, though callers should really only
+   * pass one — see (tabs)/profile.tsx for the router.canGoBack() check
+   * that decides which one to pass.
+   */
+  onBackPress?: () => void;
 }
 
-/** Consistent screen-top row: an optional menu button, title (+ optional subtitle), one optional action on the right. */
-export function ScreenHeader({ title, subtitle, right, onMenuPress }: ScreenHeaderProps) {
+/** Consistent screen-top row: an optional menu or back button, title (+ optional subtitle), one optional action on the right. */
+export function ScreenHeader({ title, subtitle, right, onMenuPress, onBackPress }: ScreenHeaderProps) {
   const theme = useTheme();
 
   return (
     <View style={styles.row}>
-      {onMenuPress ? (
+      {onBackPress ? (
+        <Pressable
+          onPress={onBackPress}
+          hitSlop={8}
+          style={styles.menuButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back">
+          <Ionicons name="arrow-back" size={24} color={theme.text} />
+        </Pressable>
+      ) : onMenuPress ? (
         <Pressable
           onPress={onMenuPress}
           hitSlop={8}

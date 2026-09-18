@@ -1,6 +1,7 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -11,7 +12,7 @@ SplashScreen.preventAutoHideAsync();
 
 /**
  * Reads the effective color scheme (device setting, or the student's manual
- * override from Settings → Appearance — see hooks/use-color-scheme.ts) and
+ * override from the Appearance page — see hooks/use-color-scheme.ts) and
  * applies it to React Navigation's own chrome (headers, the tab bar). Split
  * out from RootLayout because this needs ContentStateProvider to already be
  * mounted (the manual override lives there) — the navigator itself has to
@@ -58,6 +59,14 @@ function ThemedNavigator() {
           name="about"
           options={{ presentation: 'modal', headerShown: true, title: 'About' }}
         />
+        <Stack.Screen
+          name="appearance"
+          options={{ presentation: 'modal', headerShown: true, title: 'Appearance' }}
+        />
+        <Stack.Screen
+          name="availability"
+          options={{ presentation: 'modal', headerShown: true, title: 'Study Availability' }}
+        />
       </Stack>
     </ThemeProvider>
   );
@@ -94,12 +103,14 @@ export default function RootLayout() {
   if (!ready) return null;
 
   return (
-    <SafeAreaProvider>
-      <AppStateProvider initialData={appStateInitial}>
-        <ContentStateProvider initialData={contentStateInitial}>
-          <ThemedNavigator />
-        </ContentStateProvider>
-      </AppStateProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <AppStateProvider initialData={appStateInitial}>
+          <ContentStateProvider initialData={contentStateInitial}>
+            <ThemedNavigator />
+          </ContentStateProvider>
+        </AppStateProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
