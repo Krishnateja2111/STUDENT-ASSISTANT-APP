@@ -40,15 +40,19 @@ function isValidDuration(value: string): boolean {
 }
 
 export default function TaskEntryScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  // courseId is an optional pre-fill for a brand-new task only (e.g. the
+  // "+ Add task" button on a course's own detail page) — an existing task
+  // being edited always keeps its own real courseId, never this param.
+  const { id, courseId: presetCourseId } = useLocalSearchParams<{ id?: string; courseId?: string }>();
   const { courses, tasks, addTask, updateTask, removeTask } = useAppState();
   const theme = useTheme();
 
   const existing = id ? tasks.find((t) => t.id === id) : undefined;
+  const presetCourseExists = Boolean(presetCourseId && courses.some((c) => c.id === presetCourseId));
 
   const [initial] = useState(() => ({
     title: existing?.title ?? '',
-    courseId: existing?.courseId ?? courses[0]?.id ?? '',
+    courseId: existing?.courseId ?? (presetCourseExists ? presetCourseId! : courses[0]?.id ?? ''),
     taskType: existing?.taskType ?? ('graded_assignment' as TaskType),
     dueDate: existing?.dueDate ?? '',
     estimatedMinutes: existing ? String(existing.estimatedMinutes) : '',

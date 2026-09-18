@@ -14,7 +14,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { getCourseAccent } from '@/lib/course-accent';
 import { dueLabel } from '@/lib/due-label';
 import { formatMinutes } from '@/lib/format-duration';
-import { formatFileSize, pickDocument } from '@/lib/pick-document';
+import { formatFileSize, pickDocuments } from '@/lib/pick-document';
 import { TASK_TYPE_LABEL } from '@/lib/scheduling';
 import { useAppState } from '@/state/app-state';
 import { useContentState } from '@/state/content-state';
@@ -53,14 +53,20 @@ export default function CourseDetailScreen() {
   const handleUpload = async () => {
     setUploadError(null);
     setUploading(true);
-    const result = await pickDocument();
+    const result = await pickDocuments();
     setUploading(false);
     if (result.status === 'error') {
       setUploadError(result.message);
       return;
     }
     if (result.status === 'cancelled') return;
-    addDocument({ ...result.file, courseId: id, uploadedAt: new Date().toISOString() });
+    const uploadedAt = new Date().toISOString();
+    for (const file of result.files) {
+      addDocument({ ...file, courseId: id, uploadedAt });
+    }
+    if (result.skipped.length > 0) {
+      setUploadError(`Skipped ${result.skipped.map((s) => `${s.fileName} (${s.reason})`).join(', ')}`);
+    }
   };
 
   const handleDeleteCourse = () => {
@@ -197,6 +203,12 @@ export default function CourseDetailScreen() {
               </Card>
             </Pressable>
           ))}
+          <Button
+            label="+ Add task"
+            variant="outlined"
+            onPress={() => router.push(`/task-entry?courseId=${course.id}`)}
+            style={styles.addTaskButton}
+          />
         </View>
       )}
 
@@ -311,6 +323,9 @@ const styles = StyleSheet.create({
   },
   taskRowTitle: {
     flex: 1,
+  },
+  addTaskButton: {
+    marginTop: Spacing.one,
   },
   completedRow: {
     flexDirection: 'row',
