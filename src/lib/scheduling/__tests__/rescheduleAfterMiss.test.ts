@@ -72,6 +72,33 @@ describe('rescheduleAfterMiss', () => {
     expect(result.scheduledBlocks[0].taskId).toBe('M');
   });
 
+  it('never hands the missed task its own original slot back as the "new" placement', () => {
+    // Z is the only task, and window 1 exactly fits it -- under the old
+    // (buggy) logic, the missed task's own old slot was added back into the
+    // free-time search space, so it was trivially the earliest opening and
+    // got handed right back unchanged. A real reschedule must land somewhere
+    // else: window 2, the only other real option.
+    const z = makeTask({ id: 'Z', title: 'Missed early', dueDate: '2026-03-10T00:00:00', estimatedMinutes: 60 });
+    const twoWindowAvailability: AvailabilityBlock[] = [
+      { id: 'w1', start: '2026-03-01T09:00:00', end: '2026-03-01T10:00:00' }, // exactly 60 min -- Z's original slot
+      { id: 'w2', start: '2026-03-02T09:00:00', end: '2026-03-02T11:00:00' }, // 120 min, the only other option
+    ];
+
+    const before = scheduleTasksByPriority([z], twoWindowAvailability);
+    expect(before.scheduled).toHaveLength(1);
+    expect(before.scheduled[0].start).toBe('2026-03-01T09:00:00'); // confirms Z's real original slot is window 1
+
+    const result = rescheduleAfterMiss(z, [z], twoWindowAvailability);
+
+    expect(result.overflow).toHaveLength(0);
+    expect(result.changes[0].reasonCode).toBe(ReasonCode.MISSED_TASK_REINSERTED);
+    const newBlock = result.changes[0].newBlock!;
+    expect(newBlock).toBeDefined();
+    // Must NOT be window 1 (its own old slot) -- must be window 2.
+    expect(newBlock.start).not.toBe('2026-03-01T09:00:00');
+    expect(newBlock.start).toBe('2026-03-02T09:00:00');
+  });
+
   it('reports overflow when there is truly no slot left anywhere for the missed task', () => {
     const saturating = makeTask({ id: 'X', title: 'Filler', taskType: 'graded_assignment', dueDate: '2026-03-01T11:00:00', estimatedMinutes: 120 });
     const missed = makeTask({ id: 'Y', title: 'Missed Thing', taskType: 'reading', dueDate: '2026-03-05T00:00:00', estimatedMinutes: 30 });

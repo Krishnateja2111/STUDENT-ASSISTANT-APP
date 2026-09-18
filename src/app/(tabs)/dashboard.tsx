@@ -14,7 +14,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { SectionHeader } from '@/components/section-header';
 import { StatusBadge } from '@/components/status-badge';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing, StatusColors } from '@/constants/theme';
+import { IconColors, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getCourseAccent } from '@/lib/course-accent';
 import { formatMinutes } from '@/lib/format-duration';
@@ -63,6 +63,7 @@ export default function DashboardScreen() {
     nearTermWorkload,
     markTaskCompleted,
     reopenTask,
+    rescheduleTask,
     lastAcceptedChange,
   } = useAppState();
   const { profile } = useContentState();
@@ -119,7 +120,14 @@ export default function DashboardScreen() {
     .filter((b) => taskForBlock(b)?.status !== 'completed')
     .reduce((sum, b) => sum + (new Date(b.end).getTime() - new Date(b.start).getTime()) / 60_000, 0);
 
-  const nextBlock = todaysBlocks.find((b) => new Date(b.end).getTime() > NOW.getTime());
+  // Bug fix: this used to be a pure time filter (block.end > now), so a task
+  // completed early via the "Complete" button in Today's Plan kept showing
+  // here — unchanged, still counting down — until its original scheduled
+  // end time finally passed. "Next up" is meant to answer "what should I do
+  // next," which a completed task never is, regardless of its clock time.
+  const nextBlock = todaysBlocks.find(
+    (b) => new Date(b.end).getTime() > NOW.getTime() && taskForBlock(b)?.status !== 'completed'
+  );
   const nextTask = nextBlock ? taskForBlock(nextBlock) : undefined;
 
   const handleMarkMissed = (taskId: string) => {
@@ -140,7 +148,7 @@ export default function DashboardScreen() {
               style={styles.iconButton}
               accessibilityRole="button"
               accessibilityLabel="Notifications">
-              <Ionicons name="notifications-outline" size={22} color={theme.text} />
+              <Ionicons name="notifications" size={22} color={IconColors.pumpkin} />
               {missedTasks.length > 0 && <View style={[styles.badgeDot, { borderColor: theme.background }]} />}
             </Pressable>
             <Pressable
@@ -164,55 +172,39 @@ export default function DashboardScreen() {
         clearly-labeled cards fixes the semantic mismatch without touching
         or hiding that underlying calculation.
       */}
-      <Card style={styles.summaryCard}>
-        {todaysBlocks.length === 0 ? (
-          <>
-            <ThemedText themeColor="textSecondary">Nothing scheduled today.</ThemedText>
-            {availableMinutesToday > 0 && (
-              <ThemedText type="small" themeColor="textMuted">
-                You still have {formatMinutes(availableMinutesToday)} of availability today.
+      {todaysBlocks.length > 0 && (
+        <Card style={styles.summaryCard}>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryStat}>
+              <ThemedText type="keyNumber">{formatMinutes(plannedMinutes)}</ThemedText>
+              <ThemedText type="meta" themeColor="textSecondary">
+                Planned
               </ThemedText>
-            )}
-          </>
-        ) : (
-          <>
-            <View style={styles.summaryRow}>
-              <View style={styles.summaryStat}>
-                <ThemedText type="keyNumber">{formatMinutes(plannedMinutes)}</ThemedText>
-                <ThemedText type="meta" themeColor="textSecondary">
-                  Planned
-                </ThemedText>
-              </View>
-              <View style={styles.summaryStat}>
-                <ThemedText type="keyNumber">{todaysBlocks.length}</ThemedText>
-                <ThemedText type="meta" themeColor="textSecondary">
-                  Tasks
-                </ThemedText>
-              </View>
-              <View style={styles.summaryStat}>
-                <ThemedText type="keyNumber">{formatMinutes(availableMinutesToday)}</ThemedText>
-                <ThemedText type="meta" themeColor="textSecondary">
-                  Available
-                </ThemedText>
-              </View>
             </View>
-            <ProgressBar value={todayProgressPct} color={StatusColors.success} style={styles.summaryProgress} />
-            {/* Honest, real comparison of what's LEFT to do today (not the
-                raw planned total — completing a task should visibly move
-                this, not leave a stale warning in place) against today's
-                real availability. Remaining can legitimately exceed
-                available if a commitment/unavailable period was added after
-                today's plan was already set (nothing auto-repacks on its
-                own — see the master spec's "change as little as necessary"
-                rule); this just surfaces that instead of hiding it. */}
-            {remainingMinutesToday > availableMinutesToday && (
-              <ThemedText type="small" style={styles.overbookedNote}>
-                What&apos;s left today is more than today&apos;s availability — your schedule may need a review.
+            <View style={styles.summaryStat}>
+              <ThemedText type="keyNumber">{todaysBlocks.length}</ThemedText>
+              <ThemedText type="meta" themeColor="textSecondary">
+                {todaysBlocks.length === 1 ? 'Task' : 'Tasks'}
               </ThemedText>
-            )}
-          </>
-        )}
-      </Card>
+            </View>
+            <View style={styles.summaryStat}>
+              <ThemedText type="keyNumber">{formatMinutes(availableMinutesToday)}</ThemedText>
+              <ThemedText type="meta" themeColor="textSecondary">
+                Available
+              </ThemedText>
+            </View>
+          </View>
+          <ProgressBar value={todayProgressPct} color={StatusColors.success} style={styles.summaryProgress} />
+          {/* Remaining can legitimately exceed available if a commitment /
+              unavailable period was added after today's plan was set
+              (nothing auto-repacks on its own) — this surfaces it. */}
+          {remainingMinutesToday > availableMinutesToday && (
+            <ThemedText type="small" style={styles.overbookedNote}>
+              Today&apos;s plan runs over your free time.
+            </ThemedText>
+          )}
+        </Card>
+      )}
 
       {/*
         Bug fix: this used to be a single vague banner that opened the
@@ -227,7 +219,7 @@ export default function DashboardScreen() {
       {unscheduledPendingTasks.length > 0 && (
         <View style={styles.section}>
           <SectionHeader
-            title={`${unscheduledPendingTasks.length} task${unscheduledPendingTasks.length > 1 ? 's' : ''} still need${unscheduledPendingTasks.length > 1 ? '' : 's'} scheduling`}
+            title={`${unscheduledPendingTasks.length} task${unscheduledPendingTasks.length > 1 ? 's' : ''} to schedule`}
           />
           {unscheduledPendingTasks.map((task) => (
             <Pressable key={task.id} onPress={() => router.push(`/task/${task.id}`)}>
@@ -255,35 +247,22 @@ export default function DashboardScreen() {
               {healthMeta.label}
             </ThemedText>
           </View>
-          {/*
-            Bug fix: health.message (from getScheduleHealth, protected) says
-            "You have Xh of work due before {nearest deadline} but only Yh
-            scheduled" — but X is the sum of EVERY active task's time, not
-            just the ones actually due by that deadline (most are due
-            later). Reproduced live: it claimed "9h due before Wednesday"
-            when only one 45-minute task genuinely was. The status badge
-            above (red/yellow/green) is still that protected file's real,
-            more rigorous whole-horizon placement simulation — untouched,
-            still authoritative. Only the misleading sentence is replaced,
-            with two separately-correct ones built from nearTermWorkload
-            (app-state.tsx) — the same real tasks/effectiveAvailability
-            data, just summed and labeled honestly.
-          */}
+          {/* Trimmed to one line. The red/yellow/green label above is
+              getScheduleHealth's own whole-horizon feasibility read
+              (protected, authoritative); these numbers are the same
+              tasks/effectiveAvailability data, summed — from nearTermWorkload
+              in app-state.tsx, not the protected file's misleading
+              "before X" sentence. */}
           {nearTermWorkload && (
-            <>
-              <ThemedText type="meta" themeColor="textSecondary">
-                Across all your upcoming deadlines: {formatMinutes(nearTermWorkload.neededMinutesTotal)} of work,{' '}
-                {formatMinutes(nearTermWorkload.availableMinutesTotal)} of availability.
-                {health.suggestedDeferrals[0] && (health.status === 'red' || health.status === 'yellow')
-                  ? ` Consider deferring ${health.suggestedDeferrals[0].title}.`
-                  : ''}
-              </ThemedText>
-              <ThemedText type="small" themeColor="textMuted">
-                Due by your next deadline ({new Date(nearTermWorkload.nearestDeadline).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}):{' '}
-                {formatMinutes(nearTermWorkload.neededMinutesNearTerm)} needed,{' '}
-                {formatMinutes(nearTermWorkload.availableMinutesNearTerm)} available before then.
-              </ThemedText>
-            </>
+            <ThemedText type="meta" themeColor="textSecondary">
+              {formatMinutes(nearTermWorkload.neededMinutesTotal)} to do ·{' '}
+              {formatMinutes(nearTermWorkload.availableMinutesTotal)} available
+            </ThemedText>
+          )}
+          {health.suggestedDeferrals[0] && (health.status === 'red' || health.status === 'yellow') && (
+            <ThemedText type="small" themeColor="textMuted">
+              Could defer: {health.suggestedDeferrals[0].title}
+            </ThemedText>
           )}
         </Card>
       </View>
@@ -317,7 +296,7 @@ export default function DashboardScreen() {
                 {missedTasks.length} task{missedTasks.length > 1 ? 's' : ''} missed
               </ThemedText>
               <ThemedText type="meta" themeColor="textSecondary">
-                {missedTasks[0].title} — tap to see the updated schedule
+                {missedTasks[0].title}
               </ThemedText>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
@@ -334,6 +313,18 @@ export default function DashboardScreen() {
           const task = taskForBlock(block);
           if (!task) return null;
           const isActive = task.status !== 'missed' && task.status !== 'completed';
+          // Bug fix (per product decision): "Missed" is a backward-looking
+          // claim -- you can't have missed something that hasn't happened
+          // yet -- but nothing previously stopped tapping it on a task
+          // scheduled hours or days from now. That's also what let a missed
+          // task get rescheduled right back into its own still-upcoming,
+          // still-untouched slot (see rescheduleAfterMiss.ts's own fix): the
+          // engine now excludes that slot regardless, but the real fix is
+          // this button shouldn't have been available before the time
+          // actually passed in the first place. "Complete" stays available
+          // early on purpose -- finishing something ahead of schedule is a
+          // real, legitimate action; claiming to have missed it isn't.
+          const canMarkMissed = isActive && new Date(block.end).getTime() <= NOW.getTime();
           return (
             <ScheduledTaskCard
               key={block.id}
@@ -352,13 +343,25 @@ export default function DashboardScreen() {
                       onPress={() => markTaskCompleted(task.id)}
                       style={styles.actionButton}
                     />
-                    <Button
-                      label="Missed"
-                      variant="outlined"
-                      color={StatusColors.danger}
-                      onPress={() => handleMarkMissed(task.id)}
-                      style={styles.actionButton}
-                    />
+                    {canMarkMissed ? (
+                      <Button
+                        label="Missed"
+                        variant="outlined"
+                        color={StatusColors.danger}
+                        onPress={() => handleMarkMissed(task.id)}
+                        style={styles.actionButton}
+                      />
+                    ) : (
+                      <Button
+                        label="Reschedule"
+                        variant="outlined"
+                        onPress={() => {
+                          rescheduleTask(task.id);
+                          router.push('/reschedule');
+                        }}
+                        style={styles.actionButton}
+                      />
+                    )}
                   </View>
                 ) : task.status === 'completed' ? (
                   <View style={styles.taskActions}>
@@ -422,10 +425,8 @@ export default function DashboardScreen() {
               <ThemedText type="cardTitle">Needs your input</ThemedText>
             </View>
             <ThemedText type="meta" themeColor="textSecondary">
-              {needsInputTask.title} is your lowest-priority item right now.{' '}
-              {isScheduled
-                ? "It still fits on your schedule, but review it if your plans change."
-                : "It isn't scheduled yet — review it when you're ready."}
+              {needsInputTask.title} — lowest priority right now
+              {isScheduled ? '' : ', not scheduled yet'}
             </ThemedText>
             <View style={styles.nudgeActions}>
               <Button

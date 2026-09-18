@@ -127,12 +127,20 @@ export default function RescheduleScreen() {
             Boolean(change?.newBlock) &&
             Boolean(entryTask) &&
             new Date(change!.newBlock!.end).getTime() > new Date(entryTask!.dueDate).getTime();
+          // The engine uses the same MISSED_TASK_REINSERTED reason code
+          // whether the student actually missed the task or chose to move
+          // it early via "Reschedule" — a proactive move on a task that's
+          // still 'pending' shouldn't be labeled "MISSED".
+          const isProactiveMove =
+            entry.reasonCode === ReasonCode.MISSED_TASK_REINSERTED && entryTask?.status !== 'missed';
+          const label = isProactiveMove ? 'RESCHEDULED' : REASON_LABEL[entry.reasonCode];
+          const labelColor = isProactiveMove ? StatusColors.brand : StatusColors.danger;
           return (
             <Card key={entry.taskId} accentColor={courseAccent(entry.taskId)} style={styles.card}>
               <View style={styles.cardHeader}>
-                <Ionicons name={REASON_ICON[entry.reasonCode]} size={16} color={StatusColors.danger} />
-                <ThemedText type="meta" themeColor="textMuted" style={styles.reasonLabel}>
-                  {REASON_LABEL[entry.reasonCode]}
+                <Ionicons name={REASON_ICON[entry.reasonCode]} size={16} color={labelColor} />
+                <ThemedText type="meta" style={[styles.reasonLabel, { color: labelColor }]}>
+                  {label}
                 </ThemedText>
               </View>
               <ThemedText type="cardTitle">{taskTitle(entry.taskId)}</ThemedText>

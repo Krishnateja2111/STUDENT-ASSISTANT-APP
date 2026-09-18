@@ -7,23 +7,31 @@ import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
 import { StatusBadge } from '@/components/status-badge';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing, StatusColors } from '@/constants/theme';
+import { MinTouchTarget, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getCourseAccent } from '@/lib/course-accent';
 import { dueLabel } from '@/lib/due-label';
 import { formatMinutes } from '@/lib/format-duration';
+import { getNow } from '@/lib/reference-date';
 import { TASK_TYPE_LABEL } from '@/lib/scheduling';
 import { useAppState } from '@/state/app-state';
 
-function formatBlockTime(startIso: string, endIso: string) {
-  const day = new Date(startIso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+function formatBlockDay(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function formatBlockTimeRange(startIso: string, endIso: string) {
   const start = new Date(startIso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   const end = new Date(endIso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  return `${day} · ${start} – ${end}`;
+  return `${start} – ${end}`;
 }
 
 function formatDueDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function capitalize(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /**
@@ -35,7 +43,7 @@ function formatDueDate(iso: string) {
  */
 export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { tasks, courses, scheduledBlocks, markTaskCompleted, reopenTask } = useAppState();
+  const { tasks, courses, scheduledBlocks, markTaskCompleted, reopenTask, rescheduleTask } = useAppState();
   const theme = useTheme();
 
   const task = tasks.find((t) => t.id === id);
@@ -55,6 +63,15 @@ export default function TaskDetailScreen() {
     .filter((b) => b.taskId === task.id)
     .sort((a, b) => a.start.localeCompare(b.start));
   const isScheduled = blocks.length > 0;
+  // Bug fix (per product decision): "Missed" claims something already
+  // happened and didn't -- it shouldn't be tappable on a task whose
+  // scheduled time hasn't arrived yet (see the same fix on Dashboard's
+  // Today's Plan, and the underlying rescheduleAfterMiss.ts fix this
+  // motivated). Uses the LATEST block's end in case the task is split
+  // across more than one piece -- the task's scheduled time isn't over
+  // until all of them are.
+  const canMarkMissed =
+    isScheduled && Math.max(...blocks.map((b) => new Date(b.end).getTime())) <= getNow().getTime();
   const due = dueLabel(task.dueDate);
   const dependencies = (task.dependsOn ?? [])
     .map((depId) => tasks.find((t) => t.id === depId))
@@ -65,10 +82,25 @@ export default function TaskDetailScreen() {
       <Stack.Screen
         options={{
           title: '',
+          // Explicit back control — the bare default arrow was reported
+          // missing/unclear; this matches the "Done" pattern used on the
+          // app's other pushed detail/settings screens, with the same
+          // no-history fallback.
+          headerLeft: () => (
+            <Pressable
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/courses'))}
+              hitSlop={8}
+              style={styles.headerAction}
+              accessibilityRole="button"
+              accessibilityLabel="Go back">
+              <Ionicons name="chevron-back" size={24} color={theme.text} />
+            </Pressable>
+          ),
           headerRight: () => (
             <Pressable
               onPress={() => router.push(`/task-entry?id=${task.id}`)}
               hitSlop={8}
+              style={styles.headerAction}
               accessibilityRole="button"
               accessibilityLabel="Edit task">
               <Ionicons name="create-outline" size={22} color={theme.textSecondary} />
@@ -98,40 +130,36 @@ export default function TaskDetailScreen() {
 
       <Card style={styles.detailsCard}>
         <View style={styles.detailRow}>
-          <ThemedText type="meta" themeColor="textMuted">
+          <ThemedText type="meta" themeColor="textMuted" style={styles.detailLabel}>
             Type
           </ThemedText>
-          <ThemedText type="default">{TASK_TYPE_LABEL[task.taskType]}</ThemedText>
+          <ThemedText type="default" style={styles.detailValueText}>
+            {capitalize(TASK_TYPE_LABEL[task.taskType])}
+          </ThemedText>
         </View>
         <View style={styles.detailRow}>
-          <ThemedText type="meta" themeColor="textMuted">
-            Due
+          <ThemedText type="meta" themeColor="textMuted" style={styles.detailLabel}>
+            Deadline
           </ThemedText>
-          <View style={styles.detailValueGroup}>
+          <View style={styles.detailValueRow}>
             <ThemedText type="default">{formatDueDate(task.dueDate)}</ThemedText>
             {task.status !== 'completed' && <StatusBadge label={due.label} color={due.color} />}
           </View>
         </View>
         <View style={styles.detailRow}>
-          <ThemedText type="meta" themeColor="textMuted">
+          <ThemedText type="meta" themeColor="textMuted" style={styles.detailLabel}>
             Duration
           </ThemedText>
-          <ThemedText type="default">{formatMinutes(task.estimatedMinutes)}</ThemedText>
-        </View>
-        <View style={styles.detailRow}>
-          <ThemedText type="meta" themeColor="textMuted">
-            Priority
-          </ThemedText>
-          <ThemedText type="default" themeColor="textSecondary">
-            Set automatically from deadline and type
+          <ThemedText type="default" style={styles.detailValueText}>
+            {formatMinutes(task.estimatedMinutes)}
           </ThemedText>
         </View>
         {dependencies.length > 0 && (
           <View style={styles.detailRow}>
-            <ThemedText type="meta" themeColor="textMuted">
+            <ThemedText type="meta" themeColor="textMuted" style={styles.detailLabel}>
               Depends on
             </ThemedText>
-            <ThemedText type="default" themeColor="textSecondary">
+            <ThemedText type="default" themeColor="textSecondary" style={styles.detailValueText}>
               {dependencies.map((d) => d.title).join(', ')}
             </ThemedText>
           </View>
@@ -140,23 +168,26 @@ export default function TaskDetailScreen() {
 
       <View style={styles.section}>
         <ThemedText type="meta" themeColor="textMuted" style={styles.sectionLabel}>
-          SCHEDULE
+          PLANNED STUDY TIME
         </ThemedText>
         {isScheduled ? (
           <Card accentColor={accent} style={styles.scheduleCard}>
             {blocks.map((block) => (
               <View key={block.id} style={styles.scheduleRow}>
-                <Ionicons name="time-outline" size={16} color={theme.textSecondary} />
-                <ThemedText type="default" themeColor="textSecondary">
-                  {formatBlockTime(block.start, block.end)}
-                </ThemedText>
+                <Ionicons name="time-outline" size={16} color={theme.textSecondary} style={styles.scheduleIcon} />
+                <View style={styles.scheduleTextGroup}>
+                  <ThemedText type="cardTitle">{formatBlockDay(block.start)}</ThemedText>
+                  <ThemedText type="meta" themeColor="textSecondary">
+                    {formatBlockTimeRange(block.start, block.end)}
+                  </ThemedText>
+                </View>
               </View>
             ))}
           </Card>
         ) : (
-          <ThemedText themeColor="textSecondary">
+          <ThemedText type="small" themeColor="textSecondary">
             {task.status === 'missed'
-              ? "Not scheduled right now — it needs to go through recovery to get a new time."
+              ? 'Not scheduled right now — it needs to go through recovery to get a new time.'
               : "Not scheduled yet — it hasn't been fit into your availability."}
           </ThemedText>
         )}
@@ -175,13 +206,27 @@ export default function TaskDetailScreen() {
               onPress={() => markTaskCompleted(task.id)}
               style={styles.actionButton}
             />
-            <Button
-              label="Missed"
-              variant="outlined"
-              color={StatusColors.danger}
-              onPress={() => router.push(`/recovery/${task.id}`)}
-              style={styles.actionButton}
-            />
+            {canMarkMissed ? (
+              <Button
+                label="Missed"
+                variant="outlined"
+                color={StatusColors.danger}
+                onPress={() => router.push(`/recovery/${task.id}`)}
+                style={styles.actionButton}
+              />
+            ) : (
+              // Time hasn't arrived yet — you can't have "missed" it. If
+              // plans changed, move it to a different open slot instead.
+              <Button
+                label="Reschedule"
+                variant="outlined"
+                onPress={() => {
+                  rescheduleTask(task.id);
+                  router.push('/reschedule');
+                }}
+                style={styles.actionButton}
+              />
+            )}
           </View>
         )}
         {task.status === 'pending' && !isScheduled && (
@@ -226,18 +271,33 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   detailsCard: {
-    gap: Spacing.two,
+    gap: Spacing.three,
   },
   detailRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.three,
+  },
+  detailLabel: {
+    width: 76,
+    paddingTop: 1,
+  },
+  detailValueRow: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     gap: Spacing.two,
   },
-  detailValueGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
+  detailValueText: {
+    flex: 1,
+    textAlign: 'right',
+  },
+  headerAction: {
+    minHeight: MinTouchTarget,
+    minWidth: MinTouchTarget,
+    justifyContent: 'center',
   },
   section: {
     gap: Spacing.two,
@@ -246,12 +306,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   scheduleCard: {
-    gap: Spacing.one,
+    gap: Spacing.two,
   },
   scheduleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
+  },
+  scheduleIcon: {
+    marginTop: 2,
+  },
+  scheduleTextGroup: {
+    flex: 1,
+    gap: 1,
   },
   actions: {
     marginTop: Spacing.one,

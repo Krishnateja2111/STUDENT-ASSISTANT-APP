@@ -1,5 +1,5 @@
 import { scheduleTasksByPriority } from './generateSchedule';
-import { allocateFromSegments, toSegments, type TimeSegment } from './timeSlots';
+import { allocateFromSegments } from './timeSlots';
 import { ReasonCode } from './types';
 import type { AvailabilityBlock, RescheduleResult, ScheduledBlock, Task } from './types';
 
@@ -7,30 +7,6 @@ function isoFromMs(ms: number): string {
   const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-/**
- * Removes `blocks` worth of time from `segments`, producing the free time
- * left over. Used to derive "whatever's left after everyone else's fixed
- * placements" for the missed task to search within.
- */
-function subtractBlocks(segments: TimeSegment[], blocks: ScheduledBlock[]): TimeSegment[] {
-  let result = segments;
-  for (const block of blocks) {
-    const blockStart = new Date(block.start).getTime();
-    const blockEnd = new Date(block.end).getTime();
-    const next: TimeSegment[] = [];
-    for (const seg of result) {
-      if (blockEnd <= seg.start || blockStart >= seg.end) {
-        next.push(seg);
-        continue;
-      }
-      if (seg.start < blockStart) next.push({ start: seg.start, end: blockStart });
-      if (blockEnd < seg.end) next.push({ start: blockEnd, end: seg.end });
-    }
-    result = next;
-  }
-  return result.sort((a, b) => a.start - b.start);
 }
 
 /**
@@ -47,6 +23,21 @@ function subtractBlocks(segments: TimeSegment[], blocks: ScheduledBlock[]): Time
  * back to the earliest slot available at all, on the reasoning that a missed
  * task needs remediation rather than permanent abandonment. Only if no slot
  * exists anywhere does it go to overflow.
+ *
+ * Bug fix (reproduced live): a "reschedule" must search for a genuinely
+ * DIFFERENT time, never the missed task's own original slot back again —
+ * that's not a reschedule, it's a no-op wearing one. The free-time search
+ * space used to be reconstructed from full availability minus only the
+ * OTHER tasks' blocks specifically so the missed task's own old slot came
+ * back into play as a candidate — meaning any task marked missed before its
+ * scheduled time actually arrived (nothing stops that; there's no time gate
+ * on the "Missed" action) would find its own still-untouched, still-free
+ * old slot as the earliest opening and simply get handed it right back,
+ * unchanged. previous.remainingSegments already excludes every block from
+ * the fresh full-priority run above, INCLUDING the missed task's own —
+ * using it directly means the old slot is correctly off the table as a
+ * candidate for its own replacement, regardless of whether marking it
+ * missed happened before or after that time actually passed.
  */
 export function rescheduleAfterMiss(
   missedTask: Task,
@@ -57,12 +48,7 @@ export function rescheduleAfterMiss(
   const previousBlockForMissed = previous.scheduled.find((b) => b.taskId === missedTask.id);
   const otherBlocks = previous.scheduled.filter((b) => b.taskId !== missedTask.id);
 
-  const freeSegments = subtractBlocks(
-    // Start from full availability (not previous.remainingSegments) so that
-    // the missed task's own old slot is also back in play as free time.
-    toSegments(availability),
-    otherBlocks
-  );
+  const freeSegments = previous.remainingSegments;
 
   const durationMs = missedTask.estimatedMinutes * 60_000;
   const deadlineMs = new Date(missedTask.dueDate).getTime();

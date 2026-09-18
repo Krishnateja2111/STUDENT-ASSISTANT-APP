@@ -207,6 +207,8 @@ interface AppState {
   pendingReschedule: RescheduleResult | null;
   pendingExplanations: ExplanationEntry[];
   markMissed: (taskId: string) => void;
+  /** Proactively move one already-scheduled task to a different open slot — same engine, review, and apply flow as markMissed, but the task is never flagged "missed" (it isn't; the student is choosing to move it before its time). */
+  rescheduleTask: (taskId: string) => void;
   acceptReschedule: () => void;
 
   /** Summary of the most recently accepted reschedule, for the Dashboard's "recently adjusted" note. */
@@ -795,6 +797,20 @@ export function AppStateProvider({
         schedulingRevisionRef.current += 1;
         invalidatePendingProposal();
         const result = rescheduleAfterMiss(missedTask, tasks, effectiveAvailability);
+        setPendingProposal(createScheduleProposal(result, schedulingRevisionRef.current));
+        setPendingExplanations(explainChanges(result, tasks));
+      },
+      rescheduleTask: (taskId) => {
+        // Same as markMissed minus the status flip. rescheduleAfterMiss
+        // doesn't care about task status (scheduleTasksByPriority never
+        // filters on it), and acceptReschedule's missed->pending recovery
+        // only touches tasks that are actually 'missed' — so a task moved
+        // this way stays 'pending' cleanly start to finish.
+        const target = tasks.find((t) => t.id === taskId);
+        if (!target) return;
+        schedulingRevisionRef.current += 1;
+        invalidatePendingProposal();
+        const result = rescheduleAfterMiss(target, tasks, effectiveAvailability);
         setPendingProposal(createScheduleProposal(result, schedulingRevisionRef.current));
         setPendingExplanations(explainChanges(result, tasks));
       },
