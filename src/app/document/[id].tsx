@@ -2,28 +2,44 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { ImageViewerModal } from '@/components/image-viewer-modal';
+import { PdfViewer } from '@/components/pdf-viewer';
+import { PdfViewerModal } from '@/components/pdf-viewer-modal';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing, StatusColors } from '@/constants/theme';
+import { MinTouchTarget, Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { fileTypeMeta } from '@/lib/file-type-meta';
-import { formatFileSize } from '@/lib/pick-document';
-import { useAppState } from '@/state/app-state';
+import { openFileExternally } from '@/lib/open-file';
 import { useContentState } from '@/state/content-state';
+
+const PREVIEW_HEIGHT = 320;
 
 export default function DocumentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { courses } = useAppState();
   const { documents, removeDocument } = useContentState();
   const theme = useTheme();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [showPdfViewer, setShowPdfViewer] = useState(false);
 
   const doc = documents.find((d) => d.id === id);
-  const courseName = doc ? (courses.find((c) => c.id === doc.courseId)?.name ?? 'Unknown course') : '';
-  const isImage = doc?.mimeType.startsWith('image/');
+  const category = doc ? fileTypeMeta(doc.mimeType).category : 'other';
+  const noun = category === 'image' ? 'image' : 'document';
+
+  const handleOpen = async () => {
+    if (!doc) return;
+    setOpenError(null);
+    setOpening(true);
+    const result = await openFileExternally(doc.uri, doc.fileName, doc.mimeType);
+    setOpening(false);
+    if (!result.ok) setOpenError(result.message);
+  };
 
   if (!doc) {
     return (
@@ -35,45 +51,81 @@ export default function DocumentDetailScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Stack.Screen options={{ title: '' }} />
+      <Stack.Screen
+        options={{
+          title: '',
+          headerLeft: () => (
+            <Pressable
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/documents'))}
+              hitSlop={8}
+              style={styles.headerAction}
+              accessibilityRole="button"
+              accessibilityLabel="Go back">
+              <Ionicons name="chevron-back" size={24} color={theme.text} />
+            </Pressable>
+          ),
+        }}
+      />
 
-      {isImage ? (
-        <Image source={{ uri: doc.uri }} style={styles.previewImage} contentFit="contain" />
-      ) : (
-        <View style={[styles.previewPlaceholder, { backgroundColor: `${fileTypeMeta(doc.mimeType).color}14` }]}>
-          <Ionicons name={fileTypeMeta(doc.mimeType).icon} size={64} color={fileTypeMeta(doc.mimeType).color} />
-        </View>
+      {category === 'image' && (
+        <>
+          <Pressable onPress={() => setShowImageViewer(true)}>
+            <Image source={{ uri: doc.uri }} style={{ width: '100%', height: PREVIEW_HEIGHT }} contentFit="contain" />
+          </Pressable>
+          <ThemedText type="small" themeColor="textMuted" style={styles.hint}>
+            Tap to open full screen
+          </ThemedText>
+          <ImageViewerModal visible={showImageViewer} uri={doc.uri} onClose={() => setShowImageViewer(false)} />
+        </>
       )}
 
-      <ThemedText type="screenTitle">{doc.fileName}</ThemedText>
+      {category === 'pdf' && (
+        <>
+          <View style={[styles.pdfFrame, { borderColor: theme.border }]}>
+            <PdfViewer uri={doc.uri} height={PREVIEW_HEIGHT} showToolbar={false} />
+            {/* An overlay, not a wrapping Pressable, so the tap is caught
+                reliably regardless of how the WebView/iframe underneath
+                handles touch — the small inline preview isn't meant to be
+                interactively scrolled/zoomed anyway, just tapped open. */}
+            <Pressable
+              onPress={() => setShowPdfViewer(true)}
+              style={StyleSheet.absoluteFill}
+              accessibilityRole="button"
+              accessibilityLabel="View PDF full-screen"
+            />
+          </View>
+          <ThemedText type="small" themeColor="textMuted" style={styles.hint}>
+            Tap to open full screen
+          </ThemedText>
+          <PdfViewerModal visible={showPdfViewer} uri={doc.uri} onClose={() => setShowPdfViewer(false)} />
+        </>
+      )}
 
-      <View style={[styles.metaRow, { borderBottomColor: theme.border }]}>
-        <ThemedText type="meta" themeColor="textMuted">
-          Course
-        </ThemedText>
-        <ThemedText type="default">{courseName}</ThemedText>
-      </View>
-      <View style={[styles.metaRow, { borderBottomColor: theme.border }]}>
-        <ThemedText type="meta" themeColor="textMuted">
-          Uploaded
-        </ThemedText>
-        <ThemedText type="default">{new Date(doc.uploadedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</ThemedText>
-      </View>
-      <View style={[styles.metaRow, { borderBottomColor: theme.border }]}>
-        <ThemedText type="meta" themeColor="textMuted">
-          Size
-        </ThemedText>
-        <ThemedText type="default">{formatFileSize(doc.sizeBytes)}</ThemedText>
-      </View>
-      <View style={[styles.metaRow, { borderBottomColor: theme.border }]}>
-        <ThemedText type="meta" themeColor="textMuted">
-          Type
-        </ThemedText>
-        <ThemedText type="default">{doc.mimeType}</ThemedText>
-      </View>
+      {category === 'other' && (
+        <>
+          <View style={[styles.previewPlaceholder, { backgroundColor: `${fileTypeMeta(doc.mimeType).color}14` }]}>
+            <Ionicons name={fileTypeMeta(doc.mimeType).icon} size={64} color={fileTypeMeta(doc.mimeType).color} />
+          </View>
+          <Button
+            label={opening ? 'Opening…' : 'Open with…'}
+            onPress={handleOpen}
+            disabled={opening}
+            style={styles.openButton}
+          />
+          {openError && (
+            <ThemedText type="small" style={{ color: StatusColors.danger }}>
+              {openError}
+            </ThemedText>
+          )}
+        </>
+      )}
+
+      <ThemedText type="cardTitle" numberOfLines={2} style={styles.fileName}>
+        {doc.fileName}
+      </ThemedText>
 
       <Button
-        label="Delete document"
+        label={`Delete ${noun}`}
         variant="outlined"
         color={StatusColors.danger}
         onPress={() => setShowDeleteConfirm(true)}
@@ -82,7 +134,7 @@ export default function DocumentDetailScreen() {
 
       <ConfirmDialog
         visible={showDeleteConfirm}
-        title="Delete document?"
+        title={`Delete ${noun}?`}
         description={`"${doc.fileName}" will be permanently removed. This can't be undone.`}
         confirmLabel="Delete"
         destructive
@@ -105,13 +157,17 @@ export default function DocumentDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: Spacing.four,
-    gap: Spacing.two,
+    gap: Spacing.three,
   },
-  previewImage: {
-    width: '100%',
-    height: 220,
+  headerAction: {
+    minHeight: MinTouchTarget,
+    minWidth: MinTouchTarget,
+    justifyContent: 'center',
+  },
+  pdfFrame: {
+    borderWidth: 1,
     borderRadius: Radius.md,
-    marginBottom: Spacing.two,
+    overflow: 'hidden',
   },
   previewPlaceholder: {
     width: '100%',
@@ -119,16 +175,19 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.two,
     backgroundColor: '#E4EBF1',
   },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.two,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  openButton: {
+    marginTop: Spacing.one,
+  },
+  hint: {
+    textAlign: 'center',
+    marginTop: -Spacing.two,
+  },
+  fileName: {
+    textAlign: 'center',
   },
   deleteButton: {
-    marginTop: Spacing.three,
+    marginTop: Spacing.two,
   },
 });

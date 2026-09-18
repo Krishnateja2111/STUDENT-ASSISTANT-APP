@@ -6,15 +6,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { NavMenu } from '@/components/nav-menu';
 import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing, StatusColors } from '@/constants/theme';
+import { IconColors, Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getCourseAccent } from '@/lib/course-accent';
+import { courseCode } from '@/lib/course-code';
 import { fileTypeMeta, type DocumentFilter } from '@/lib/file-type-meta';
-import { formatFileSize, pickDocument } from '@/lib/pick-document';
+import { pickDocuments } from '@/lib/pick-document';
 import { useAppState } from '@/state/app-state';
 import { useContentState } from '@/state/content-state';
 
@@ -31,7 +33,7 @@ function formatDate(iso: string) {
 
 export default function DocumentsScreen() {
   const { courses } = useAppState();
-  const { documents, addDocument } = useContentState();
+  const { documents, addDocument, removeDocuments } = useContentState();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const [uploading, setUploading] = useState(false);
@@ -41,21 +43,49 @@ export default function DocumentsScreen() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<DocumentFilter>('all');
   const [showNavMenu, setShowNavMenu] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const courseName = (courseId: string) => courses.find((c) => c.id === courseId)?.name ?? 'Unknown course';
+
+  const enterSelectMode = () => {
+    setUploading(false);
+    setSelectMode(true);
+  };
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const handlePickFile = async () => {
     setPickerError(null);
     setPickerBusy(true);
-    const result = await pickDocument();
+    const result = await pickDocuments();
     setPickerBusy(false);
     if (result.status === 'error') {
       setPickerError(result.message);
       return;
     }
     if (result.status === 'cancelled') return;
-    addDocument({ ...result.file, courseId: targetCourseId, uploadedAt: new Date().toISOString() });
-    setUploading(false);
+    const uploadedAt = new Date().toISOString();
+    for (const file of result.files) {
+      addDocument({ ...file, courseId: targetCourseId, uploadedAt });
+    }
+    // Some files can be picked and others skipped (e.g. one was too large)
+    // in the same batch -- report that instead of silently dropping them.
+    if (result.skipped.length > 0) {
+      setPickerError(`Skipped ${result.skipped.map((s) => `${s.fileName} (${s.reason})`).join(', ')}`);
+    }
+    if (result.files.length > 0) setUploading(false);
   };
 
   const visibleDocuments = useMemo(() => {
@@ -73,18 +103,66 @@ export default function DocumentsScreen() {
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingTop: insets.top + Spacing.four }]}>
       <ScreenHeader
-        title="Documents"
-        onMenuPress={() => setShowNavMenu(true)}
+        title={selectMode ? `${selectedIds.size} selected` : 'Documents'}
+        onMenuPress={selectMode ? undefined : () => setShowNavMenu(true)}
         right={
-          <Pressable
-            onPress={() => setUploading((v) => !v)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Upload document">
-            <Ionicons name="cloud-upload-outline" size={24} color={theme.text} />
-          </Pressable>
+          selectMode ? (
+            <Pressable
+              onPress={exitSelectMode}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel selection">
+              <ThemedText type="default" style={{ color: StatusColors.brand, fontWeight: '600' }}>
+                Cancel
+              </ThemedText>
+            </Pressable>
+          ) : (
+            <View style={styles.headerRight}>
+              {documents.length > 0 && (
+                <Pressable
+                  onPress={enterSelectMode}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Select documents">
+                  <Ionicons name="checkmark-circle" size={24} color={IconColors.oliveGold} />
+                </Pressable>
+              )}
+              <Pressable
+                onPress={() => setUploading((v) => !v)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Upload document">
+                <Ionicons name="cloud-upload" size={24} color={StatusColors.brand} />
+              </Pressable>
+            </View>
+          )
         }
       />
+
+      {selectMode && (
+        <View style={styles.selectBar}>
+          <Button
+            label={selectedIds.size === visibleDocuments.length ? 'Clear all' : 'Select all'}
+            variant="outlined"
+            onPress={() =>
+              setSelectedIds(
+                selectedIds.size === visibleDocuments.length
+                  ? new Set()
+                  : new Set(visibleDocuments.map((d) => d.id))
+              )
+            }
+            style={styles.flexButton}
+          />
+          <Button
+            label={selectedIds.size > 0 ? `Delete (${selectedIds.size})` : 'Delete'}
+            variant="outlined"
+            color={StatusColors.danger}
+            disabled={selectedIds.size === 0}
+            onPress={() => setShowDeleteConfirm(true)}
+            style={styles.flexButton}
+          />
+        </View>
+      )}
 
       <View style={[styles.searchBar, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
         <Ionicons name="search" size={16} color={theme.textMuted} />
@@ -146,7 +224,7 @@ export default function DocumentsScreen() {
           </View>
           <View style={styles.uploadActions}>
             <Button
-              label={pickerBusy ? 'Opening picker…' : 'Choose file'}
+              label={pickerBusy ? 'Opening picker…' : 'Choose files'}
               onPress={handlePickFile}
               disabled={!targetCourseId || pickerBusy}
               style={styles.flexButton}
@@ -178,23 +256,55 @@ export default function DocumentsScreen() {
 
       {visibleDocuments.map((doc) => {
         const meta = fileTypeMeta(doc.mimeType);
+        const checked = selectedIds.has(doc.id);
         return (
-          <Pressable key={doc.id} onPress={() => router.push(`/document/${doc.id}`)}>
-            <Card style={styles.docCard}>
+          <Pressable
+            key={doc.id}
+            onPress={() => (selectMode ? toggleSelected(doc.id) : router.push(`/document/${doc.id}`))}
+            onLongPress={() => {
+              if (!selectMode) {
+                enterSelectMode();
+                toggleSelected(doc.id);
+              }
+            }}>
+            <Card style={[styles.docCard, selectMode && checked && styles.docCardSelected]}>
+              {selectMode && (
+                <Ionicons
+                  name={checked ? 'checkbox' : 'square-outline'}
+                  size={22}
+                  color={checked ? StatusColors.brand : theme.textMuted}
+                />
+              )}
               <View style={[styles.docIcon, { backgroundColor: `${meta.color}1A` }]}>
                 <Ionicons name={meta.icon} size={20} color={meta.color} />
               </View>
               <View style={styles.docMain}>
-                <ThemedText type="cardTitle">{doc.fileName}</ThemedText>
-                <ThemedText type="meta" themeColor="textSecondary">
-                  {courseName(doc.courseId)} · {formatDate(doc.uploadedAt)} · {formatFileSize(doc.sizeBytes)}
+                <ThemedText type="cardTitle" numberOfLines={1}>
+                  {doc.fileName}
+                </ThemedText>
+                <ThemedText type="meta" themeColor="textSecondary" numberOfLines={1}>
+                  {courseCode(courseName(doc.courseId))} · {formatDate(doc.uploadedAt)}
                 </ThemedText>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+              {!selectMode && <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />}
             </Card>
           </Pressable>
         );
       })}
+
+      <ConfirmDialog
+        visible={showDeleteConfirm}
+        title={`Delete ${selectedIds.size} ${selectedIds.size === 1 ? 'document' : 'documents'}?`}
+        description="They'll be permanently removed. This can't be undone."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          removeDocuments([...selectedIds]);
+          setShowDeleteConfirm(false);
+          exitSelectMode();
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
 
       <NavMenu visible={showNavMenu} onClose={() => setShowNavMenu(false)} />
     </ScrollView>
@@ -260,10 +370,23 @@ const styles = StyleSheet.create({
   errorText: {
     color: StatusColors.danger,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  selectBar: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
   docCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
+  },
+  docCardSelected: {
+    borderWidth: 1,
+    borderColor: StatusColors.brand,
   },
   docIcon: {
     width: 40,

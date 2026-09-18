@@ -53,6 +53,8 @@ interface ContentState {
   documents: StudentDocument[];
   addDocument: (doc: Omit<StudentDocument, 'id'>) => void;
   removeDocument: (id: string) => void;
+  /** Batch delete — one state update / one persist for a multi-select delete. */
+  removeDocuments: (ids: string[]) => void;
   /** Cascade cleanup for app-state's removeCourse — a separate Context, so callers invoke both. */
   removeDocumentsByCourse: (courseId: string) => void;
 
@@ -141,8 +143,19 @@ export function ContentStateProvider({
   const value = useMemo<ContentState>(
     () => ({
       documents,
-      addDocument: (doc) => setDocuments((prev) => [...prev, { ...doc, id: `doc-${Date.now()}` }]),
+      // Bug fix (caught live): Date.now() alone collides when multiple
+      // files are uploaded in one batch (a synchronous loop calling this
+      // once per file easily lands two calls in the same millisecond) --
+      // reproduced as a real "two children with the same key" React error
+      // and a document list that couldn't tell the two apart. The random
+      // suffix guarantees uniqueness within a batch, not just across ticks.
+      addDocument: (doc) =>
+        setDocuments((prev) => [...prev, { ...doc, id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }]),
       removeDocument: (id) => setDocuments((prev) => prev.filter((d) => d.id !== id)),
+      removeDocuments: (ids) => {
+        const idSet = new Set(ids);
+        setDocuments((prev) => prev.filter((d) => !idSet.has(d.id)));
+      },
       removeDocumentsByCourse: (courseId) =>
         setDocuments((prev) => prev.filter((d) => d.courseId !== courseId)),
 

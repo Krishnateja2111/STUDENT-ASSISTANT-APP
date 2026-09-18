@@ -12,12 +12,8 @@ import { ScreenHeader } from '@/components/screen-header';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { getCourseAccent } from '@/lib/course-accent';
+import { courseCode } from '@/lib/course-code';
 import { useAppState } from '@/state/app-state';
-
-function courseCode(name: string): string {
-  const firstToken = name.split(/[\s–-]+/).find(Boolean) ?? name;
-  return firstToken.slice(0, 4).toUpperCase();
-}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -54,7 +50,7 @@ export default function CoursesScreen() {
             <Card style={styles.courseCard}>
               <View style={styles.topRow}>
                 <View style={[styles.badge, { backgroundColor: `${accent}1A` }]}>
-                  <ThemedText type="smallBold" style={{ color: accent }}>
+                  <ThemedText type="smallBold" numberOfLines={1} style={{ color: accent, letterSpacing: 0.3 }}>
                     {courseCode(course.name)}
                   </ThemedText>
                 </View>
@@ -100,15 +96,17 @@ const styles = StyleSheet.create({
   },
   topRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: Spacing.two,
   },
   badge: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.md,
+    minHeight: 22,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 3,
+    borderRadius: Radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'flex-start',
   },
   titleGroup: {
     flex: 1,
