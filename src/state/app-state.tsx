@@ -21,10 +21,13 @@ import {
   type ScheduleChange,
   type ScheduleHealth,
   type Task,
+  type TaskType,
   type TemporaryUnavailablePeriod,
 } from '@/lib/scheduling';
-import { getNow } from '@/lib/reference-date';
+import { getNow, getToday } from '@/lib/reference-date';
+import { enumerateRecurringDates } from '@/lib/recurring-dates';
 import { readPersisted, writePersisted } from '@/lib/storage';
+import { supabase } from '@/lib/supabase';
 import { createScheduleProposal, isProposalCurrent, type ScheduleProposal } from '@/state/scheduling-types';
 import { seedAvailability, seedAvailabilityRules, seedCourses, seedTasks } from '@/state/seed-data';
 
@@ -50,6 +53,36 @@ const APP_STATE_STORAGE_KEY = 'student-assistant:app-state';
 const MIN_HORIZON_WEEKS = 2;
 const MAX_HORIZON_WEEKS = 12;
 
+/**
+ * A recurring daily study commitment ("45 min of Exam Prep every weekday
+ * until Oct 10") — deliberately NOT a new concept the scheduling engine
+ * knows about. Creating one just bulk-generates ordinary Task rows, one per
+ * matching day, each with its own per-day dueDate so the engine's existing
+ * priority/urgency logic naturally tries to place each day's chunk on that
+ * day rather than clustering everything near the end — same trick
+ * AvailabilityRule already uses on the availability side (expandAvailability
+ * turns a weekly rule into dated blocks before the engine ever sees them).
+ * No protected file (including types.ts — Task itself gains no new field)
+ * had to change to add this.
+ */
+export interface RecurringStudyGoal {
+  id: string;
+  courseId: string;
+  title: string;
+  taskType: TaskType;
+  dailyMinutes: number;
+  /** "YYYY-MM-DD", inclusive. */
+  startDate: string;
+  /** "YYYY-MM-DD", inclusive — the target/deadline day itself. */
+  endDate: string;
+  /** 0 (Sun) – 6 (Sat), matching Date.getDay() — same convention as AvailabilityRule. */
+  weekdays: number[];
+  /** Every "YYYY-MM-DD" ever generated for this goal — kept even for a day whose task was later deleted, so cancelling early and re-adding the same range can never resurrect a day the student explicitly removed. */
+  generatedDates: string[];
+  /** Ids of the tasks generated for this goal — used only to find them again for cancelRecurringStudyGoal; a task deleted individually just drops out of `tasks` and is naturally skipped. */
+  generatedTaskIds: string[];
+}
+
 /** The subset of AppState that's durable academic data — everything else (auth, in-flight recovery UI) stays transient. */
 export interface PersistedAppState {
   courses: Course[];
@@ -63,6 +96,8 @@ export interface PersistedAppState {
   fixedCommitments?: FixedCommitment[];
   /** Category 3 (Phase 3F) — temporary unavailable periods (e.g. travel). */
   unavailablePeriods?: TemporaryUnavailablePeriod[];
+  /** Optional for backward compatibility with data persisted before this field existed. */
+  recurringStudyGoals?: RecurringStudyGoal[];
 }
 
 function isValidPersistedAppState(value: unknown): value is PersistedAppState {
@@ -87,10 +122,41 @@ export async function loadPersistedAppState(): Promise<PersistedAppState | null>
   return isValidPersistedAppState(data) ? data : null;
 }
 
+/**
+ * Phase 1 (real auth) — resolved by RootLayout alongside the two persisted
+ * data loads, before anything mounts, so index.tsx's redirect (isAuthed ?
+ * dashboard : auth) never fires against a stale "not logged in yet" default
+ * while the real session is still loading from AsyncStorage. Supabase's own
+ * client already persists the session there (see lib/supabase.ts) — this
+ * just asks it what it found.
+ */
+export async function loadInitialSession(): Promise<boolean> {
+  const { data } = await supabase.auth.getSession();
+  return data.session !== null;
+}
+
 interface AppState {
   isAuthed: boolean;
-  login: () => void;
-  logout: () => void;
+  /**
+   * Passwordless sign-in, step 1 — sends a one-time code to the given email
+   * (creates the account automatically if it doesn't exist yet; Supabase's
+   * OTP flow doesn't distinguish sign-up from log-in, so neither does this).
+   * The code's length is whatever Supabase's project settings generate
+   * (confirmed live as 8 digits, not the commonly-assumed 6) — never
+   * hardcoded or assumed here or in the UI, see auth.tsx.
+   * Returns a human-readable error message, or null on success.
+   */
+  sendLoginCode: (email: string) => Promise<string | null>;
+  /**
+   * Passwordless sign-in, step 2 — verifies the code from sendLoginCode.
+   * On success, Supabase establishes a real session (persisted via
+   * AsyncStorage, see lib/supabase.ts) and isAuthed flips to true via the
+   * onAuthStateChange subscription below — this function itself doesn't
+   * set it directly, to keep session state single-sourced. Returns a
+   * human-readable error message, or null on success.
+   */
+  verifyLoginCode: (email: string, code: string) => Promise<string | null>;
+  logout: () => Promise<void>;
 
   courses: Course[];
   addCourse: (course: Omit<Course, 'id'>) => string;
@@ -136,6 +202,34 @@ interface AppState {
    * documents call contentState.removeDocumentsByCourse(id) alongside this.
    */
   removeCourse: (id: string) => void;
+
+  recurringStudyGoals: RecurringStudyGoal[];
+  /**
+   * Bulk-generates one real Task per matching day across [startDate,
+   * endDate] and competes the whole batch for whatever's free via
+   * replanTasks — every other already-scheduled task is structurally
+   * protected (replanTasks's own guarantee), same as a single addTask.
+   * Unlike addTask, this never routes through the review/proposal flow:
+   * asking the student to review N individual placements one at a time
+   * would be unusable, and a new task landing in free time or honestly
+   * overflowing was already silent, unreviewed behavior even for a single
+   * addTask. Returns the new goal's id.
+   */
+  addRecurringStudyGoal: (input: {
+    courseId: string;
+    title: string;
+    taskType: Task['taskType'];
+    dailyMinutes: number;
+    startDate: string;
+    endDate: string;
+    weekdays: number[];
+  }) => string;
+  /**
+   * Removes every generated task for this goal that's today-or-future and
+   * still 'pending' (never a completed or missed one — those are real
+   * history, left exactly as they are), then removes the goal itself.
+   */
+  cancelRecurringStudyGoal: (goalId: string) => void;
 
   scheduledBlocks: ScheduledBlock[];
   /** Also returns the task to 'pending' so it re-enters planning instead of becoming an invisible orphan. */
@@ -227,12 +321,29 @@ function isSchedulable(task: Task): boolean {
 export function AppStateProvider({
   children,
   initialData,
+  initialIsAuthed,
 }: {
   children: ReactNode;
   /** Resolved by RootLayout before this provider ever mounts — null means no valid persisted data existed, so seed data is used. */
   initialData: PersistedAppState | null;
+  /** Resolved by RootLayout via loadInitialSession() — see that function's doc comment. */
+  initialIsAuthed: boolean;
 }) {
-  const [isAuthed, setIsAuthed] = useState(false);
+  const [isAuthed, setIsAuthed] = useState(initialIsAuthed);
+
+  // Single source of truth for isAuthed from here on — fires on sign-in,
+  // sign-out, and token refresh (including a refresh failure, which also
+  // means "no longer actually authed" even though nothing local called
+  // logout()). sendLoginCode/verifyLoginCode/logout all go through
+  // Supabase directly and let this listener propagate the result, rather
+  // than each one separately calling setIsAuthed — avoids the two ever
+  // disagreeing.
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthed(session !== null);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
   const [courses, setCourses] = useState<Course[]>(initialData?.courses ?? seedCourses);
   const [tasks, setTasks] = useState<Task[]>(initialData?.tasks ?? seedTasks);
   const [availability, setAvailability] = useState<AvailabilityBlock[]>(initialData?.availability ?? seedAvailability);
@@ -242,6 +353,9 @@ export function AppStateProvider({
   const [fixedCommitments, setFixedCommitments] = useState<FixedCommitment[]>(initialData?.fixedCommitments ?? []);
   const [unavailablePeriods, setUnavailablePeriods] = useState<TemporaryUnavailablePeriod[]>(
     initialData?.unavailablePeriods ?? []
+  );
+  const [recurringStudyGoals, setRecurringStudyGoals] = useState<RecurringStudyGoal[]>(
+    initialData?.recurringStudyGoals ?? []
   );
   const [scheduledBlocks, setScheduledBlocks] = useState<ScheduledBlock[]>(() => {
     if (initialData) return initialData.scheduledBlocks;
@@ -285,8 +399,9 @@ export function AppStateProvider({
       availabilityRules,
       fixedCommitments,
       unavailablePeriods,
+      recurringStudyGoals,
     });
-  }, [courses, tasks, availability, scheduledBlocks, availabilityRules, fixedCommitments, unavailablePeriods]);
+  }, [courses, tasks, availability, scheduledBlocks, availabilityRules, fixedCommitments, unavailablePeriods, recurringStudyGoals]);
 
   // Phase 3F wiring — the engine's real input. Recomputed whenever any of
   // the four raw sources or the active task set (which determines the
@@ -596,8 +711,17 @@ export function AppStateProvider({
   const value = useMemo<AppState>(
     () => ({
       isAuthed,
-      login: () => setIsAuthed(true),
-      logout: () => setIsAuthed(false),
+      sendLoginCode: async (email) => {
+        const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+        return error?.message ?? null;
+      },
+      verifyLoginCode: async (email, code) => {
+        const { error } = await supabase.auth.verifyOtp({ email, token: code, type: 'email' });
+        return error?.message ?? null;
+      },
+      logout: async () => {
+        await supabase.auth.signOut();
+      },
 
       courses,
       addCourse: (course) => {
@@ -678,7 +802,75 @@ export function AppStateProvider({
         setCourses((prev) => prev.filter((c) => c.id !== id));
         setTasks((prev) => prev.filter((t) => t.courseId !== id));
         setScheduledBlocks((prev) => prev.filter((b) => !removedTaskIds.has(b.taskId)));
+        // A recurring goal whose course no longer exists would otherwise sit
+        // there orphaned — its own generated tasks are already gone via the
+        // filter above, so the goal record itself is the only thing left.
+        setRecurringStudyGoals((prev) => prev.filter((g) => g.courseId !== id));
         // Cascades to remove scheduledBlocks — scheduling-relevant, same as removeTask.
+        schedulingRevisionRef.current += 1;
+        invalidatePendingProposal();
+      },
+
+      recurringStudyGoals,
+      addRecurringStudyGoal: (input) => {
+        const dates = enumerateRecurringDates(input.startDate, input.endDate, input.weekdays);
+        const newTasks: Task[] = dates.map((dateKey, i) => ({
+          id: `task-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+          title: input.title,
+          courseId: input.courseId,
+          taskType: input.taskType,
+          dueDate: `${dateKey}T21:00:00`,
+          estimatedMinutes: input.dailyMinutes,
+          status: 'pending',
+        }));
+
+        const nextTasks = [...tasks, ...newTasks];
+        // replanTasks structurally protects every other already-scheduled
+        // task (see its own doc comment) — the whole batch of new daily
+        // instances competes only for genuinely free time, same guarantee a
+        // single addTask already relies on.
+        const result = replanTasks(newTasks, nextTasks, effectiveAvailability, scheduledBlocks);
+
+        setTasks(nextTasks);
+        setScheduledBlocks(result.scheduledBlocks);
+        schedulingRevisionRef.current += 1;
+        invalidatePendingProposal();
+
+        const goalId = `goal-${Date.now()}`;
+        setRecurringStudyGoals((prev) => [
+          ...prev,
+          {
+            id: goalId,
+            courseId: input.courseId,
+            title: input.title,
+            taskType: input.taskType,
+            dailyMinutes: input.dailyMinutes,
+            startDate: input.startDate,
+            endDate: input.endDate,
+            weekdays: input.weekdays,
+            generatedDates: dates,
+            generatedTaskIds: newTasks.map((t) => t.id),
+          },
+        ]);
+        return goalId;
+      },
+      cancelRecurringStudyGoal: (goalId) => {
+        const goal = recurringStudyGoals.find((g) => g.id === goalId);
+        if (!goal) return;
+        const today = getToday();
+        // Only a still-pending, today-or-future instance is actually
+        // cancelled — a completed or missed one is real history and stays
+        // exactly as it is, same principle as removeCourse never un-completing
+        // a task's past.
+        const idsToRemove = new Set(
+          goal.generatedTaskIds.filter((taskId) => {
+            const t = tasks.find((task) => task.id === taskId);
+            return Boolean(t) && t!.status === 'pending' && t!.dueDate.slice(0, 10) >= today;
+          })
+        );
+        setTasks((prev) => prev.filter((t) => !idsToRemove.has(t.id)));
+        setScheduledBlocks((prev) => prev.filter((b) => !idsToRemove.has(b.taskId)));
+        setRecurringStudyGoals((prev) => prev.filter((g) => g.id !== goalId));
         schedulingRevisionRef.current += 1;
         invalidatePendingProposal();
       },
@@ -864,6 +1056,7 @@ export function AppStateProvider({
       availabilityRules,
       fixedCommitments,
       unavailablePeriods,
+      recurringStudyGoals,
       effectiveAvailability,
       health,
       nearTermWorkload,

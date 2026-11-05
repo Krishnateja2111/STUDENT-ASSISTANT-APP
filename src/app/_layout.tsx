@@ -1,14 +1,46 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
+import { AppState as RNAppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { AppStateProvider, loadPersistedAppState, type PersistedAppState } from '@/state/app-state';
-import { ContentStateProvider, loadPersistedContentState, type PersistedContentState } from '@/state/content-state';
+import { syncDailySummary, syncDeadlineReminders } from '@/lib/notifications';
+import { AppStateProvider, loadInitialSession, loadPersistedAppState, useAppState, type PersistedAppState } from '@/state/app-state';
+import { ContentStateProvider, loadPersistedContentState, useContentState, type PersistedContentState } from '@/state/content-state';
 
 SplashScreen.preventAutoHideAsync();
+
+/**
+ * Keeps scheduled notifications in sync with real app state — no UI of its
+ * own. Re-syncs (cancel everything this feature previously scheduled,
+ * reschedule fresh) whenever a task is added, edited, completed, or deleted,
+ * the schedule changes, either preference is toggled, or the app comes back
+ * to the foreground (catches "a new day started while the app sat in the
+ * background," which no state change alone would trigger). Needs both
+ * providers already mounted (tasks/scheduledBlocks live in AppState, the
+ * preferences in ContentState), so it renders alongside ThemedNavigator
+ * rather than above it.
+ */
+function NotificationSync() {
+  const { tasks, scheduledBlocks } = useAppState();
+  const { notificationPrefs } = useContentState();
+
+  useEffect(() => {
+    const sync = () => {
+      syncDeadlineReminders(tasks, notificationPrefs.deadlineReminders);
+      syncDailySummary(scheduledBlocks, notificationPrefs.dailyPlanSummary);
+    };
+    sync();
+    const sub = RNAppState.addEventListener('change', (state) => {
+      if (state === 'active') sync();
+    });
+    return () => sub.remove();
+  }, [tasks, scheduledBlocks, notificationPrefs.deadlineReminders, notificationPrefs.dailyPlanSummary]);
+
+  return null;
+}
 
 /**
  * Reads the effective color scheme (device setting, or the student's manual
@@ -82,15 +114,23 @@ export default function RootLayout() {
   const [ready, setReady] = useState(false);
   const [appStateInitial, setAppStateInitial] = useState<PersistedAppState | null>(null);
   const [contentStateInitial, setContentStateInitial] = useState<PersistedContentState | null>(null);
+  // Resolved alongside the two local-storage loads below — without this,
+  // index.tsx's isAuthed-based redirect would fire against the default
+  // "not logged in" state and flash the auth screen even for an
+  // already-signed-in user, before the real session finished loading.
+  const [isAuthedInitial, setIsAuthedInitial] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadPersistedAppState(), loadPersistedContentState()]).then(([appData, contentData]) => {
-      if (cancelled) return;
-      setAppStateInitial(appData);
-      setContentStateInitial(contentData);
-      setReady(true);
-    });
+    Promise.all([loadPersistedAppState(), loadPersistedContentState(), loadInitialSession()]).then(
+      ([appData, contentData, authed]) => {
+        if (cancelled) return;
+        setAppStateInitial(appData);
+        setContentStateInitial(contentData);
+        setIsAuthedInitial(authed);
+        setReady(true);
+      }
+    );
     return () => {
       cancelled = true;
     };
@@ -105,8 +145,9 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AppStateProvider initialData={appStateInitial}>
+        <AppStateProvider initialData={appStateInitial} initialIsAuthed={isAuthedInitial}>
           <ContentStateProvider initialData={contentStateInitial}>
+            <NotificationSync />
             <ThemedNavigator />
           </ContentStateProvider>
         </AppStateProvider>
