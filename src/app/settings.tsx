@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
@@ -11,16 +11,45 @@ import { ListRow } from '@/components/list-row';
 import { SectionHeader } from '@/components/section-header';
 import { StatusBadge } from '@/components/status-badge';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing, StatusColors } from '@/constants/theme';
+import { StatusColors, Spacing } from '@/constants/theme';
+import { DAILY_SUMMARY_HOUR, DEADLINE_REMINDER_LEAD_MS, requestNotificationPermission } from '@/lib/notifications';
 import { useAppState } from '@/state/app-state';
-import { useContentState } from '@/state/content-state';
+import { type NotificationPrefs, useContentState } from '@/state/content-state';
+
+function formatHour12(hour: number): string {
+  const period = hour < 12 ? 'AM' : 'PM';
+  const h = hour % 12 === 0 ? 12 : hour % 12;
+  return `${h}:00 ${period}`;
+}
 
 export default function SettingsScreen() {
   const { logout } = useAppState();
-  const { profile } = useContentState();
+  const { profile, notificationPrefs, updateNotificationPrefs } = useContentState();
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [permissionDenied, setPermissionDenied] = useState(false);
 
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+  const DEADLINE_REMINDER_LEAD_HOURS = DEADLINE_REMINDER_LEAD_MS / (60 * 60 * 1000);
+
+  // Both toggles gate on the same single OS-level notification permission --
+  // one request/denial state genuinely covers either.
+  const handleToggleNotificationPref = (key: keyof NotificationPrefs) => async (value: boolean) => {
+    if (!value) {
+      updateNotificationPrefs({ [key]: false });
+      return;
+    }
+    // Web has no real notification delivery (see lib/notifications.web.ts)
+    // -- let the preference turn on anyway so it's not stuck permanently
+    // disabled for someone previewing on web; it'll actually start working
+    // once they're on a native build with permission granted.
+    if (Platform.OS === 'web') {
+      updateNotificationPrefs({ [key]: true });
+      return;
+    }
+    const granted = await requestNotificationPermission();
+    setPermissionDenied(!granted);
+    if (granted) updateNotificationPrefs({ [key]: true });
+  };
 
   const handleSignOut = () => {
     setShowSignOutConfirm(false);
@@ -53,31 +82,42 @@ export default function SettingsScreen() {
 
       <View style={styles.section}>
         <SectionHeader title="Notifications" />
-        <ThemedText type="meta" themeColor="textSecondary" style={styles.sectionNote}>
-          Not built yet — nothing below sends a real notification. Shown here so you know what&apos;s planned.
-        </ThemedText>
         <Card style={styles.notificationCard}>
           <View style={styles.notificationRow}>
             <View style={styles.notificationText}>
-              <ThemedText type="cardTitle" themeColor="textMuted">
-                Deadline reminders
-              </ThemedText>
+              <ThemedText type="cardTitle">Deadline reminders</ThemedText>
               <ThemedText type="meta" themeColor="textSecondary">
-                A nudge before a task is due
+                A nudge {DEADLINE_REMINDER_LEAD_HOURS}h before a task is due
               </ThemedText>
+              {permissionDenied && (
+                <ThemedText type="small" style={styles.deniedText}>
+                  Notifications are off for this app in your device settings — turn them on there first.
+                </ThemedText>
+              )}
             </View>
-            <StatusBadge label="Coming soon" color={StatusColors.warning} />
+            <Switch
+              value={notificationPrefs.deadlineReminders}
+              onValueChange={handleToggleNotificationPref('deadlineReminders')}
+              trackColor={{ true: StatusColors.brand }}
+            />
           </View>
           <View style={styles.notificationRow}>
             <View style={styles.notificationText}>
-              <ThemedText type="cardTitle" themeColor="textMuted">
-                Daily plan summary
-              </ThemedText>
+              <ThemedText type="cardTitle">Daily plan summary</ThemedText>
               <ThemedText type="meta" themeColor="textSecondary">
-                A morning recap of today&apos;s plan
+                A recap of today&apos;s plan around {formatHour12(DAILY_SUMMARY_HOUR)}
               </ThemedText>
+              {permissionDenied && (
+                <ThemedText type="small" style={styles.deniedText}>
+                  Notifications are off for this app in your device settings — turn them on there first.
+                </ThemedText>
+              )}
             </View>
-            <StatusBadge label="Coming soon" color={StatusColors.warning} />
+            <Switch
+              value={notificationPrefs.dailyPlanSummary}
+              onValueChange={handleToggleNotificationPref('dailyPlanSummary')}
+              trackColor={{ true: StatusColors.brand }}
+            />
           </View>
         </Card>
       </View>
@@ -176,5 +216,9 @@ const styles = StyleSheet.create({
   notificationText: {
     flex: 1,
     gap: 2,
+  },
+  deniedText: {
+    color: StatusColors.danger,
+    marginTop: 2,
   },
 });
