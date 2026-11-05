@@ -22,11 +22,22 @@ function formatBlockTime(startIso: string, endIso: string) {
   return `${day}, ${start} – ${end}`;
 }
 
-const NEXT_STEPS = [
-  "We'll look for a new time for this task that still respects its deadline, if there's room.",
-  "Nothing else on your schedule moves — every other task stays exactly where it is.",
-  "You'll see exactly what changed before anything is applied, and can cancel if you don't want it.",
-];
+/**
+ * Second step's wording depends on the actual preview (see `otherAffected`
+ * below): almost always nothing else moves, but if this task is high enough
+ * priority that the only way to fit it is to bump a lower-priority task out
+ * of its slot, that's real and shouldn't be promised away. Same-or-higher
+ * priority tasks are never affected either way — that guarantee doesn't change.
+ */
+function nextSteps(otherAffectedCount: number): string[] {
+  return [
+    "We'll look for a new time for this task that still respects its deadline, if there's room.",
+    otherAffectedCount > 0
+      ? `${otherAffectedCount === 1 ? 'One lower-priority task' : `${otherAffectedCount} lower-priority tasks`} may need to move to make room — nothing same-or-higher priority ever does.`
+      : 'Nothing else on your schedule moves — every other task stays exactly where it is.',
+    "You'll see exactly what changed before anything is applied, and can cancel if you don't want it.",
+  ];
+}
 
 /**
  * Recovery / Impact — master spec's "What happened? → Impact → What happens
@@ -84,6 +95,10 @@ export default function RecoveryImpactScreen() {
   // anything yet.
   const preview = rescheduleAfterMiss(task, tasks, effectiveAvailability);
   const willOverflow = preview.overflow.some((t) => t.id === task.id);
+  // Almost always empty — see rescheduleAfterMiss's own doc comment. Only
+  // non-empty when this task's priority was high enough that the only way
+  // to fit it required bumping a strictly lower-priority task.
+  const otherAffected = preview.changes.filter((c) => c.taskId !== task.id);
   // rescheduleAfterMiss (fully protected) deliberately falls back to the
   // earliest slot available at all when the task's own deadline can't be
   // honored, rather than leaving a missed task unscheduled forever — a
@@ -166,7 +181,9 @@ export default function RecoveryImpactScreen() {
             Tasks affected
           </ThemedText>
           <ThemedText type="default" themeColor="textSecondary" style={styles.affectedValue}>
-            Just this one
+            {otherAffected.length === 0
+              ? 'Just this one'
+              : `This one + ${otherAffected.length} lower-priority ${otherAffected.length === 1 ? 'task' : 'tasks'}`}
           </ThemedText>
         </View>
         {willOverflow && (
@@ -188,7 +205,7 @@ export default function RecoveryImpactScreen() {
         WHAT HAPPENS NEXT
       </ThemedText>
       <Card style={styles.stepsCard}>
-        {NEXT_STEPS.map((step, i) => (
+        {nextSteps(otherAffected.length).map((step, i) => (
           <View key={step} style={styles.stepRow}>
             <View style={[styles.stepNumber, { backgroundColor: theme.backgroundSelected }]}>
               <ThemedText type="small" style={styles.stepNumberText}>

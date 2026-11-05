@@ -113,4 +113,97 @@ describe('rescheduleAfterMiss', () => {
     // X (the other task) is still there, untouched.
     expect(result.scheduledBlocks.some((b) => b.taskId === 'X')).toBe(true);
   });
+
+  it('bumps a strictly lower-priority task to make room for a missed higher-priority task', () => {
+    // Filler: reading, due in 10 days -- low urgency, low task-type weight.
+    // Missed: exam prep, due tomorrow -- outranks Filler on both axes, so in
+    // the fresh full-priority run Missed claims window 1 (earliest) and
+    // Filler gets window 2 (the only time left). Both windows are sized to
+    // exactly match their occupant, so nothing is left over anywhere.
+    const filler = makeTask({ id: 'F', title: 'Filler', taskType: 'reading', dueDate: '2026-03-11T00:00:00', estimatedMinutes: 90 });
+    const missed = makeTask({ id: 'M', title: 'Exam Prep', taskType: 'exam_prep', dueDate: '2026-03-02T00:00:00', estimatedMinutes: 90 });
+    const localAvailability: AvailabilityBlock[] = [
+      { id: 'a1', start: '2026-03-01T09:00:00', end: '2026-03-01T10:30:00' }, // Missed's own slot in the fresh run
+      { id: 'a2', start: '2026-03-01T11:00:00', end: '2026-03-01T12:30:00' }, // Filler's slot in the fresh run
+    ];
+
+    const before = scheduleTasksByPriority([filler, missed], localAvailability);
+    expect(before.overflow).toHaveLength(0);
+    expect(before.remainingSegments).toHaveLength(0); // both windows exactly consumed -- confirms there's genuinely no slack anywhere
+
+    const result = rescheduleAfterMiss(missed, [filler, missed], localAvailability);
+
+    // The missed (higher-priority) task must be placed, not overflowed.
+    expect(result.overflow.map((t) => t.id)).not.toContain('M');
+    const missedChange = result.changes.find((c) => c.taskId === 'M')!;
+    expect(missedChange.reasonCode).toBe(ReasonCode.MISSED_TASK_REINSERTED);
+    expect(missedChange.newBlock).toBeDefined();
+    // The missed task's own change is always first (app-state.tsx's
+    // "which task gets the toast" logic depends on this ordering).
+    expect(result.changes[0].taskId).toBe('M');
+
+    // Filler was bumped -- there's nowhere else for it to go in this fixture
+    // (only one availability window, now fully claimed by the missed task),
+    // so it honestly overflows rather than being silently dropped.
+    expect(result.overflow.map((t) => t.id)).toContain('F');
+    const fillerChange = result.changes.find((c) => c.taskId === 'F')!;
+    expect(fillerChange).toBeDefined();
+    expect(fillerChange.reasonCode).toBe(ReasonCode.DEADLINE_PROXIMITY);
+    expect(fillerChange.newBlock).toBeUndefined();
+  });
+
+  it('never bumps a same-or-higher-priority task even when it is the only thing in the way', () => {
+    // Both tasks are exam prep due the same day -- identical priority score.
+    // The one occupying the slot must never be treated as bumpable.
+    const occupying = makeTask({ id: 'O', title: 'Occupying', taskType: 'exam_prep', dueDate: '2026-03-01T11:00:00', estimatedMinutes: 120 });
+    const missed = makeTask({ id: 'M', title: 'Missed Exam Prep', taskType: 'exam_prep', dueDate: '2026-03-01T11:00:00', estimatedMinutes: 30 });
+    const localAvailability: AvailabilityBlock[] = [{ id: 'a1', start: '2026-03-01T09:00:00', end: '2026-03-01T11:00:00' }]; // exactly saturated
+
+    const result = rescheduleAfterMiss(missed, [occupying, missed], localAvailability);
+
+    // Missed task overflows -- nothing lower-priority existed to bump.
+    expect(result.overflow.map((t) => t.id)).toEqual(['M']);
+    expect(result.changes).toHaveLength(1);
+    expect(result.changes[0].reasonCode).toBe(ReasonCode.OVERFLOW_DEFERRED);
+    // Occupying is completely untouched -- same block, no change entry.
+    expect(result.scheduledBlocks.some((b) => b.taskId === 'O')).toBe(true);
+    expect(result.changes.some((c) => c.taskId === 'O')).toBe(false);
+  });
+
+  it('bumps only the weakest lower-priority task needed, leaving a stronger (but still lower-priority) one untouched', () => {
+    // Three tasks competing for three exactly-sized windows: Missed (highest,
+    // exam prep due soonest) claims window 1. Of the two remaining, Stronger
+    // (a graded assignment, due moderately soon) still outranks Weaker (a
+    // reading, due far out), so Stronger claims window 2 (earlier) and Weaker
+    // gets window 3 -- all three windows exactly consumed, nothing left over.
+    const missed = makeTask({ id: 'M', title: 'Exam Prep', taskType: 'exam_prep', dueDate: '2026-03-02T00:00:00', estimatedMinutes: 60 });
+    const stronger = makeTask({ id: 'S', title: 'Stronger Filler', taskType: 'graded_assignment', dueDate: '2026-03-05T00:00:00', estimatedMinutes: 60 });
+    const weaker = makeTask({ id: 'W', title: 'Weaker Filler', taskType: 'reading', dueDate: '2026-03-11T00:00:00', estimatedMinutes: 60 });
+    const localAvailability: AvailabilityBlock[] = [
+      { id: 'a1', start: '2026-03-01T09:00:00', end: '2026-03-01T10:00:00' }, // Missed's own slot
+      { id: 'a2', start: '2026-03-01T11:00:00', end: '2026-03-01T12:00:00' }, // Stronger's slot
+      { id: 'a3', start: '2026-03-01T13:00:00', end: '2026-03-01T14:00:00' }, // Weaker's slot -- big enough alone for Missed
+    ];
+
+    const before = scheduleTasksByPriority([missed, stronger, weaker], localAvailability);
+    expect(before.remainingSegments).toHaveLength(0);
+
+    const result = rescheduleAfterMiss(missed, [missed, stronger, weaker], localAvailability);
+
+    // Missed placed into Weaker's old slot -- the only candidate that needed
+    // to move; bumping Weaker alone was already enough.
+    const missedChange = result.changes.find((c) => c.taskId === 'M')!;
+    expect(missedChange.newBlock?.start).toBe('2026-03-01T13:00:00');
+
+    // Weaker was bumped and, with nowhere left to go, honestly overflows.
+    expect(result.overflow.map((t) => t.id)).toEqual(['W']);
+    const weakerChange = result.changes.find((c) => c.taskId === 'W')!;
+    expect(weakerChange.reasonCode).toBe(ReasonCode.DEADLINE_PROXIMITY);
+    expect(weakerChange.newBlock).toBeUndefined();
+
+    // Stronger -- still lower-priority than Missed, but never needed --
+    // stays completely untouched: same block, no change entry at all.
+    expect(result.changes.some((c) => c.taskId === 'S')).toBe(false);
+    expect(result.scheduledBlocks.some((b) => b.taskId === 'S' && b.start === '2026-03-01T11:00:00')).toBe(true);
+  });
 });
