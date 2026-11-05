@@ -148,7 +148,7 @@ export default function DashboardScreen() {
               style={styles.iconButton}
               accessibilityRole="button"
               accessibilityLabel="Notifications">
-              <Ionicons name="notifications" size={22} color={IconColors.pumpkin} />
+              <Ionicons name="notifications" size={22} color={IconColors.marigold} />
               {missedTasks.length > 0 && <View style={[styles.badgeDot, { borderColor: theme.background }]} />}
             </Pressable>
             <Pressable
@@ -448,7 +448,6 @@ export default function DashboardScreen() {
 
       <Button
         label="+ Add task"
-        variant="outlined"
         onPress={() => router.push('/task-entry')}
         style={styles.addButton}
       />

@@ -155,7 +155,6 @@ export default function DocumentsScreen() {
           />
           <Button
             label={selectedIds.size > 0 ? `Delete (${selectedIds.size})` : 'Delete'}
-            variant="outlined"
             color={StatusColors.danger}
             disabled={selectedIds.size === 0}
             onPress={() => setShowDeleteConfirm(true)}

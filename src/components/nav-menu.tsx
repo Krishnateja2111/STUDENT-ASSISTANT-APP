@@ -60,7 +60,7 @@ export function NavMenu({ visible, onClose }: NavMenuProps) {
             />
             <ListRow
               icon="notifications"
-              iconColor={IconColors.pumpkin}
+              iconColor={IconColors.marigold}
               label="Notifications"
               onPress={() => go('/notifications')}
             />

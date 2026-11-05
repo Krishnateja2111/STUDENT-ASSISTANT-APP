@@ -49,7 +49,7 @@ export const CourseAccentPalette = ['#3D7A54', '#B08D57', '#6B7F8C', '#8C7A9E', 
 export const IconColors = {
   plum: '#8E3F76',
   denim: '#2C5F8A',
-  pumpkin: '#D9691E',
+  marigold: '#CC9A3E',
   oliveGold: '#A67C1E',
   umber: '#6B5B4D',
   dustyTeal: '#3E7A72',

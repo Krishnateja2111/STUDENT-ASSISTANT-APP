@@ -126,7 +126,6 @@ export default function DocumentDetailScreen() {
 
       <Button
         label={`Delete ${noun}`}
-        variant="outlined"
         color={StatusColors.danger}
         onPress={() => setShowDeleteConfirm(true)}
         style={styles.deleteButton}

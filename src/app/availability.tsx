@@ -296,7 +296,6 @@ export default function AvailabilityScreen() {
 
         <Button
           label="+ Add weekly availability"
-          variant="outlined"
           onPress={() => runMutation(addAvailabilityRule({ weekday: 1, startTime: '18:00', endTime: '20:00' }))}
         />
       </View>
@@ -327,7 +326,6 @@ export default function AvailabilityScreen() {
 
         <Button
           label="+ Add availability block"
-          variant="outlined"
           onPress={() => {
             const now = new Date();
             now.setMinutes(0, 0, 0);
@@ -440,7 +438,7 @@ export default function AvailabilityScreen() {
             </View>
           </Card>
         ) : (
-          <Button label="+ Add fixed commitment" variant="outlined" onPress={() => setShowAddCommitment(true)} />
+          <Button label="+ Add fixed commitment" onPress={() => setShowAddCommitment(true)} />
         )}
       </View>
 
@@ -507,7 +505,7 @@ export default function AvailabilityScreen() {
             </View>
           </Card>
         ) : (
-          <Button label="+ Add unavailable period" variant="outlined" onPress={() => setShowAddUnavailable(true)} />
+          <Button label="+ Add unavailable period" onPress={() => setShowAddUnavailable(true)} />
         )}
       </View>
 
@@ -551,6 +549,9 @@ const styles = StyleSheet.create({
   section: {
     gap: Spacing.two,
   },
+  // Bug fix (reported live): Button stretches full-width by default, which
+  // reads as oversized for these lightweight "+ Add" secondary actions —
+  // same fix as dashboard.tsx/courses.tsx/course/[id].tsx.
   sectionNote: {
     marginBottom: Spacing.one,
   },

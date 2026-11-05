@@ -30,19 +30,36 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function formatDateOnly(dateKey: string) {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function formatWeekdays(weekdays: number[]): string {
+  const sorted = [...weekdays].sort();
+  if (sorted.length === 7) return 'every day';
+  if (sorted.join(',') === '1,2,3,4,5') return 'weekdays';
+  if (sorted.join(',') === '0,6') return 'weekends';
+  return sorted.map((w) => WEEKDAY_ABBR[w]).join(', ');
+}
+
 export default function CourseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { courses, tasks, removeCourse, reopenTask } = useAppState();
+  const { courses, tasks, removeCourse, reopenTask, recurringStudyGoals, cancelRecurringStudyGoal } = useAppState();
   const { documents, addDocument, removeDocumentsByCourse } = useContentState();
   const theme = useTheme();
   const [tab, setTab] = useState<TabKey>('overview');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [cancelGoalId, setCancelGoalId] = useState<string | null>(null);
 
   const course = courses.find((c) => c.id === id);
   const accent = getCourseAccent(id, courses);
   const courseTasks = tasks.filter((t) => t.courseId === id);
+  const courseGoals = recurringStudyGoals.filter((g) => g.courseId === id);
   const upcomingTasks = courseTasks
     .filter((t) => t.status !== 'completed')
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
@@ -186,6 +203,35 @@ export default function CourseDetailScreen() {
 
       {tab === 'tasks' && (
         <View style={styles.section}>
+          {courseGoals.length > 0 && (
+            <>
+              <ThemedText type="meta" themeColor="textMuted" style={styles.sectionLabel}>
+                RECURRING GOALS
+              </ThemedText>
+              {courseGoals.map((goal) => (
+                <Card key={goal.id} accentColor={accent} style={styles.goalCard}>
+                  <View style={styles.taskRow}>
+                    <ThemedText type="cardTitle" style={styles.taskRowTitle}>
+                      {goal.title}
+                    </ThemedText>
+                    <Pressable
+                      onPress={() => setCancelGoalId(goal.id)}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Cancel ${goal.title}`}>
+                      <ThemedText type="small" style={{ color: StatusColors.danger }}>
+                        Cancel
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                  <ThemedText type="meta" themeColor="textSecondary">
+                    {formatMinutes(goal.dailyMinutes)}/day, {formatWeekdays(goal.weekdays)}, through {formatDateOnly(goal.endDate)}
+                  </ThemedText>
+                </Card>
+              ))}
+            </>
+          )}
+
           {courseTasks.length === 0 && <EmptyState icon="checkmark-done-outline" message="No tasks for this course yet." />}
           {courseTasks.map((task) => (
             <Pressable key={task.id} onPress={() => router.push(`/task/${task.id}`)}>
@@ -205,7 +251,6 @@ export default function CourseDetailScreen() {
           ))}
           <Button
             label="+ Add task"
-            variant="outlined"
             onPress={() => router.push(`/task-entry?courseId=${course.id}`)}
             style={styles.addTaskButton}
           />
@@ -245,7 +290,6 @@ export default function CourseDetailScreen() {
 
       <Button
         label="Delete course"
-        variant="outlined"
         color={StatusColors.danger}
         onPress={() => setShowDeleteConfirm(true)}
         style={styles.deleteButton}
@@ -259,6 +303,19 @@ export default function CourseDetailScreen() {
         destructive
         onConfirm={handleDeleteCourse}
         onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      <ConfirmDialog
+        visible={cancelGoalId !== null}
+        title="Cancel this recurring goal?"
+        description="Removes every not-yet-done day still ahead. Days already completed or missed stay exactly as they are."
+        confirmLabel="Cancel Goal"
+        destructive
+        onConfirm={() => {
+          if (cancelGoalId) cancelRecurringStudyGoal(cancelGoalId);
+          setCancelGoalId(null);
+        }}
+        onCancel={() => setCancelGoalId(null)}
       />
     </ScrollView>
   );
@@ -314,6 +371,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   taskCard: {
+    gap: 2,
+  },
+  goalCard: {
     gap: 2,
   },
   taskRow: {

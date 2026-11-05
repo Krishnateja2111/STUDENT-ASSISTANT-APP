@@ -1,15 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { DateField } from '@/components/date-field';
 import { DateTimePicker } from '@/components/datetime-picker';
 import { ThemedText } from '@/components/themed-text';
 import { MinTouchTarget, Radius, Spacing, StatusColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { getCourseAccent } from '@/lib/course-accent';
+import { enumerateRecurringDates } from '@/lib/recurring-dates';
+import { getToday } from '@/lib/reference-date';
 import type { TaskType } from '@/lib/scheduling';
 import { useAppState } from '@/state/app-state';
 
@@ -19,6 +22,10 @@ const TASK_TYPES: { value: TaskType; label: string }[] = [
   { value: 'reading', label: 'Reading' },
   { value: 'other', label: 'Other' },
 ];
+
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6];
+const WEEKDAYS_ONLY = [1, 2, 3, 4, 5];
 
 const MAX_DURATION_MINUTES = 480; // 8h — a sensible upper bound for a single task session
 
@@ -39,12 +46,17 @@ function isValidDuration(value: string): boolean {
   return Number.isFinite(n) && n > 0 && n <= MAX_DURATION_MINUTES;
 }
 
+function isValidDateOnly(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  return !Number.isNaN(new Date(value).getTime());
+}
+
 export default function TaskEntryScreen() {
   // courseId is an optional pre-fill for a brand-new task only (e.g. the
   // "+ Add task" button on a course's own detail page) — an existing task
   // being edited always keeps its own real courseId, never this param.
   const { id, courseId: presetCourseId } = useLocalSearchParams<{ id?: string; courseId?: string }>();
-  const { courses, tasks, addTask, updateTask, removeTask } = useAppState();
+  const { courses, tasks, addTask, updateTask, removeTask, addRecurringStudyGoal } = useAppState();
   const theme = useTheme();
 
   const existing = id ? tasks.find((t) => t.id === id) : undefined;
@@ -66,19 +78,36 @@ export default function TaskEntryScreen() {
   const [attemptedSave, setAttemptedSave] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Recurring daily goal ("45 min of Exam Prep every day until Oct 10") —
+  // only offered when creating a brand-new task; editing one day's already-
+  // generated instance is just an ordinary single-task edit, never turns it
+  // into a new series.
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurStartDate, setRecurStartDate] = useState(getToday());
+  const [recurEndDate, setRecurEndDate] = useState('');
+  const [recurWeekdays, setRecurWeekdays] = useState<number[]>(EVERY_DAY);
+
   const hasChanges =
     title !== initial.title ||
     courseId !== initial.courseId ||
     taskType !== initial.taskType ||
     dueDate !== initial.dueDate ||
-    estimatedMinutes !== initial.estimatedMinutes;
+    estimatedMinutes !== initial.estimatedMinutes ||
+    isRecurring;
 
   const { showDiscardDialog, confirmDiscard, cancelDiscard, leaveWithoutPrompt } = useUnsavedChangesGuard(hasChanges);
 
   const deadlineValid = isValidDeadline(dueDate);
   const durationValid = isValidDuration(estimatedMinutes);
-  const canSave = title.trim().length > 0 && Boolean(courseId) && deadlineValid && durationValid;
-  const showDeadlineError = attemptedSave && !deadlineValid;
+  const recurStartValid = isValidDateOnly(recurStartDate);
+  const recurEndValid = isValidDateOnly(recurEndDate) && recurStartValid && recurEndDate >= recurStartDate;
+  const recurDatesCount = recurStartValid && recurEndValid ? enumerateRecurringDates(recurStartDate, recurEndDate, recurWeekdays).length : 0;
+  const recurValid = recurStartValid && recurEndValid && recurWeekdays.length > 0 && recurDatesCount > 0;
+
+  const canSave = isRecurring
+    ? title.trim().length > 0 && Boolean(courseId) && durationValid && recurValid
+    : title.trim().length > 0 && Boolean(courseId) && deadlineValid && durationValid;
+  const showDeadlineError = attemptedSave && !isRecurring && !deadlineValid;
   const showDurationError = attemptedSave && !durationValid;
 
   // Bug fix: router.back() is a silent no-op with no in-app navigation
@@ -93,6 +122,27 @@ export default function TaskEntryScreen() {
   const handleSave = () => {
     setAttemptedSave(true);
     if (!canSave) return;
+
+    if (isRecurring) {
+      // Bulk creation never routes through the review flow (see
+      // addRecurringStudyGoal's own doc comment) -- reviewing a dozen+
+      // individual placements one at a time isn't usable, and a single new
+      // task landing in free time or honestly overflowing was already
+      // silent, unreviewed behavior even for one addTask.
+      addRecurringStudyGoal({
+        courseId,
+        title: title.trim(),
+        taskType,
+        dailyMinutes: Number(estimatedMinutes),
+        startDate: recurStartDate,
+        endDate: recurEndDate,
+        weekdays: recurWeekdays,
+      });
+      leaveWithoutPrompt();
+      safeBack();
+      return;
+    }
+
     const payload = {
       title: title.trim(),
       courseId,
@@ -210,18 +260,105 @@ export default function TaskEntryScreen() {
         })}
       </View>
 
-      <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
-        DEADLINE
-      </ThemedText>
-      <DateTimePicker value={dueDate} onChange={setDueDate} />
-      {showDeadlineError && (
-        <ThemedText type="small" style={styles.errorText}>
-          Choose a due date and time.
-        </ThemedText>
+      {!existing && (
+        <>
+          <View style={[styles.recurringRow, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]}>
+            <View style={styles.recurringText}>
+              <ThemedText type="cardTitle">Repeat daily until a target date</ThemedText>
+              <ThemedText type="meta" themeColor="textSecondary">
+                A little time toward this every day, instead of one big block
+              </ThemedText>
+            </View>
+            <Switch value={isRecurring} onValueChange={setIsRecurring} trackColor={{ true: StatusColors.brand }} />
+          </View>
+        </>
+      )}
+
+      {isRecurring ? (
+        <>
+          <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
+            START DATE
+          </ThemedText>
+          <DateField value={recurStartDate} onChange={setRecurStartDate} placeholder="Choose a start date" minDate={getToday()} />
+
+          <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
+            TARGET DATE (DEADLINE)
+          </ThemedText>
+          <DateField value={recurEndDate} onChange={setRecurEndDate} placeholder="Choose a target date" minDate={recurStartDate} />
+          {attemptedSave && !recurEndValid && (
+            <ThemedText type="small" style={styles.errorText}>
+              Choose a target date on or after the start date.
+            </ThemedText>
+          )}
+
+          <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
+            REPEAT ON
+          </ThemedText>
+          <View style={styles.chipRow}>
+            <Pressable onPress={() => setRecurWeekdays(EVERY_DAY)}>
+              <View style={[styles.presetChip, { borderColor: theme.border }]}>
+                <ThemedText type="small">Every day</ThemedText>
+              </View>
+            </Pressable>
+            <Pressable onPress={() => setRecurWeekdays(WEEKDAYS_ONLY)}>
+              <View style={[styles.presetChip, { borderColor: theme.border }]}>
+                <ThemedText type="small">Weekdays</ThemedText>
+              </View>
+            </Pressable>
+          </View>
+          <View style={styles.weekdayRow}>
+            {WEEKDAY_LABELS.map((label, weekday) => {
+              const selected = recurWeekdays.includes(weekday);
+              return (
+                <Pressable
+                  key={weekday}
+                  onPress={() =>
+                    setRecurWeekdays((prev) =>
+                      prev.includes(weekday) ? prev.filter((w) => w !== weekday) : [...prev, weekday].sort()
+                    )
+                  }
+                  style={[
+                    styles.weekdayChip,
+                    selected
+                      ? { backgroundColor: StatusColors.brand }
+                      : { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border },
+                  ]}>
+                  <ThemedText type="small" style={selected ? styles.chipTextSelected : undefined}>
+                    {label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
+          {attemptedSave && recurStartValid && recurEndValid && recurWeekdays.length === 0 && (
+            <ThemedText type="small" style={styles.errorText}>
+              Choose at least one day.
+            </ThemedText>
+          )}
+          {recurStartValid && recurEndValid && recurWeekdays.length > 0 && (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.recurSummary}>
+              {recurDatesCount === 0
+                ? "That range doesn't include any of the selected days."
+                : `Creates ${recurDatesCount} task${recurDatesCount === 1 ? '' : 's'}, one per day.`}
+            </ThemedText>
+          )}
+        </>
+      ) : (
+        <>
+          <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
+            DEADLINE
+          </ThemedText>
+          <DateTimePicker value={dueDate} onChange={setDueDate} />
+          {showDeadlineError && (
+            <ThemedText type="small" style={styles.errorText}>
+              Choose a due date and time.
+            </ThemedText>
+          )}
+        </>
       )}
 
       <ThemedText type="meta" themeColor="textMuted" style={styles.label}>
-        ESTIMATED DURATION (MINUTES)
+        {isRecurring ? 'MINUTES PER DAY' : 'ESTIMATED DURATION (MINUTES)'}
       </ThemedText>
       <TextInput
         style={[
@@ -340,5 +477,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: Spacing.two,
     marginBottom: Spacing.four,
+  },
+  recurringRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.three,
+    marginTop: Spacing.two,
+  },
+  recurringText: {
+    flex: 1,
+    gap: 2,
+  },
+  presetChip: {
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+    gap: Spacing.one,
+    marginTop: Spacing.two,
+  },
+  weekdayChip: {
+    flex: 1,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.pill,
+  },
+  recurSummary: {
+    marginTop: Spacing.two,
   },
 });
